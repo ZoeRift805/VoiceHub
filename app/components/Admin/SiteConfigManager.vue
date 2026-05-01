@@ -339,6 +339,140 @@
         />
       </section>
 
+      <!-- 人机验证配置 -->
+      <section v-if="formData.captchaConfig" class="lg:col-span-2 bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 space-y-6">
+        <h3 class="text-sm font-black text-zinc-100 uppercase tracking-widest flex items-center gap-2 border-b border-zinc-800 pb-4">
+          <Fingerprint :size="16" class="text-cyan-500" /> 人机验证
+        </h3>
+
+        <div class="space-y-4">
+          <!-- 启用开关 -->
+          <div class="flex items-center justify-between p-3 bg-zinc-950/50 border border-zinc-800 rounded-xl">
+            <div>
+              <p class="text-xs font-bold text-zinc-200">启用人机验证</p>
+              <p class="text-[10px] text-zinc-500 mt-0.5">开启后登录失败达到阈值或执行敏感操作时要求验证</p>
+            </div>
+            <input
+              v-model="formData.captchaConfig.enabled"
+              type="checkbox"
+              class="w-5 h-5 rounded border-zinc-800 bg-zinc-900 accent-blue-600 cursor-pointer"
+            >
+          </div>
+
+          <!-- 服务提供商 -->
+          <div>
+            <label :class="labelClass">验证服务商</label>
+            <select
+              v-model="formData.captchaConfig.provider"
+              :class="inputClass"
+            >
+              <option value="turnstile">Cloudflare Turnstile</option>
+              <option value="hcaptcha">hCaptcha</option>
+              <option value="altcha">ALTCHA（自托管）</option>
+            </select>
+          </div>
+
+          <!-- Site Key -->
+          <div>
+            <label :class="labelClass">Site Key</label>
+            <input
+              v-model="formData.captchaConfig.siteKey"
+              type="text"
+              placeholder="公开站点密钥"
+              :class="inputClass"
+            >
+          </div>
+
+          <!-- Secret Key -->
+          <div>
+            <label :class="labelClass">Secret Key</label>
+            <div class="relative">
+              <input
+                v-model="formData.captchaConfig.secretKey"
+                :type="showSecret ? 'text' : 'password'"
+                placeholder="私密密钥"
+                :class="inputClass + ' pr-10'"
+              >
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 flex items-center pr-3"
+                @click="showSecret = !showSecret"
+              >
+                <Eye v-if="!showSecret" :size="16" class="text-zinc-500" />
+                <EyeOff v-else :size="16" class="text-zinc-500" />
+              </button>
+            </div>
+          </div>
+
+          <!-- 触发失败次数 -->
+          <div>
+            <label :class="labelClass">触发失败次数</label>
+            <input
+              v-model.number="formData.captchaConfig.maxAttempts"
+              type="number"
+              min="1"
+              max="10"
+              :class="inputClass"
+            >
+          </div>
+
+          <!-- 时间窗口 -->
+          <div>
+            <label :class="labelClass">有效时间窗口（分钟）</label>
+            <input
+              v-model.number="formData.captchaConfig.windowMinutes"
+              type="number"
+              min="1"
+              max="60"
+              :class="inputClass"
+            >
+          </div>
+
+          <!-- 保护的操作（多选） -->
+          <div>
+            <label :class="labelClass">保护的操作</label>
+            <div class="grid grid-cols-2 gap-3 mt-2">
+              <label class="flex items-center gap-2 p-2 rounded-lg bg-zinc-950/50 border border-zinc-800 cursor-pointer">
+                <input
+                  v-model="formData.captchaConfig.sensitiveActions"
+                  type="checkbox"
+                  value="login"
+                  class="w-4 h-4 rounded border-zinc-700 accent-blue-600"
+                >
+                <span class="text-xs text-zinc-300">登录</span>
+              </label>
+              <label class="flex items-center gap-2 p-2 rounded-lg bg-zinc-950/50 border border-zinc-800 cursor-pointer">
+                <input
+                  v-model="formData.captchaConfig.sensitiveActions"
+                  type="checkbox"
+                  value="register"
+                  class="w-4 h-4 rounded border-zinc-700 accent-blue-600"
+                >
+                <span class="text-xs text-zinc-300">注册</span>
+              </label>
+              <label class="flex items-center gap-2 p-2 rounded-lg bg-zinc-950/50 border border-zinc-800 cursor-pointer">
+                <input
+                  v-model="formData.captchaConfig.sensitiveActions"
+                  type="checkbox"
+                  value="reset_password"
+                  class="w-4 h-4 rounded border-zinc-700 accent-blue-600"
+                >
+                <span class="text-xs text-zinc-300">找回密码</span>
+              </label>
+              <label class="flex items-center gap-2 p-2 rounded-lg bg-zinc-950/50 border border-zinc-800 cursor-pointer">
+                <input
+                  v-model="formData.captchaConfig.sensitiveActions"
+                  type="checkbox"
+                  value="bind_email"
+                  class="w-4 h-4 rounded border-zinc-700 accent-blue-600"
+                >
+                <span class="text-xs text-zinc-300">绑定/修改邮箱</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+              
       <!-- OAuth 第三方登录配置 -->
       <OAuthConfigManager v-model="formData" class="lg:col-span-2" />
     </div>
@@ -548,6 +682,17 @@ const loadConfig = async () => {
 }
     }
 
+if (!formData.value.captchaConfig || typeof formData.value.captchaConfig !== 'object') {
+  formData.value.captchaConfig = {
+    enabled: false,
+    provider: 'turnstile',
+    siteKey: '',
+    secretKey: '',
+    maxAttempts: 3,
+    windowMinutes: 15,
+    sensitiveActions: ['login']
+  }
+}
     originalData.value = JSON.parse(JSON.stringify(formData.value))
   } catch (error) {
     console.error('加载配置失败:', error)
