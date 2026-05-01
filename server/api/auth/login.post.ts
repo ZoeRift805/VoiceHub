@@ -14,9 +14,15 @@ import {
 } from '../../services/securityService'
 import { getBeijingTime } from '~/utils/timeUtils'
 import { getClientIP } from '~~/server/utils/ip-utils'
+import { verifyTurnstileToken } from '~~/server/utils/captcha'
+import { getFailedAttempts, recordFailedAttempt, clearAttempts } from '~~/server/utils/loginAttempts'
+import { getSiteSettings } from '~~/server/utils/siteUtils'
 
 export default defineEventHandler(async (event) => {
   const startTime = Date.now()
+  const body = await readBody(event)
+  const { username, password, captchaToken } = body
+  const ip = getRequestIP(event) || '127.0.0.1' // 确保已导入 getRequestIP
 
   try {
     const body = await readBody(event)
@@ -98,6 +104,24 @@ export default defineEventHandler(async (event) => {
       })
     }
 
+      // ---- 人机验证判断 ----
+  const siteConfig = await getSiteSettings()
+  const cc = siteConfig.captchaConfig || {}
+  const needsCaptcha = cc.enabled && (
+    (cc.sensitiveActions || []).includes('login') ||
+    (await getFailedAttempts(username, ip, cc.windowMinutes || 15)) >= (cc.maxAttempts || 3)
+  )
+
+  if (needsCaptcha && !captchaToken) {
+    throw createError({ statusCode: 400, message: 'CAPTCHA_REQUIRED' })
+  }
+  if (needsCaptcha && captchaToken) {
+    const valid = await verifyTurnstileToken(captchaToken, cc.secretKey)
+    if (!valid) {
+      throw createError({ statusCode: 400, message: 'INVALID_CAPTCHA' })
+    }
+  }
+    
     // 验证密码
     const isPasswordValid = await bcrypt.compare(body.password, user.password)
     if (!isPasswordValid) {
