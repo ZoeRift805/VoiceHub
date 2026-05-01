@@ -157,7 +157,8 @@ export const systemSettings = pgTable('SystemSettings', {
   enableReplayRequests: boolean('enableReplayRequests').default(false).notNull(),
   enableCollaborativeSubmission: boolean('enableCollaborativeSubmission').default(true).notNull(),
   enableSubmissionRemarks: boolean('enableSubmissionRemarks').default(false).notNull(),
-
+  // 登录尝试记录配置
+  captchaConfig: jsonb('captcha_config').$type<CaptchaConfig>(),
   // OAuth 配置
   allowOAuthRegistration: boolean('allowOAuthRegistration').default(false).notNull(),
   oauthRedirectUri: text('oauthRedirectUri'),
@@ -495,13 +496,6 @@ export const loginAttempts = pgTable('login_attempts', {
 }, (table) => ({
   usernameIpIdx: index('idx_login_attempts_username_ip').on(table.username, table.ip),
 }))
-
-export const systemSettings = pgTable('system_settings', {
-  id: serial('id').primaryKey(),
-  // ...其他已有字段
-  captchaConfig: jsonb('captcha_config').$type<CaptchaConfig>(),
-  // ...
-})
 
 export interface CaptchaConfig {
   provider: 'turnstile' | 'hcaptcha' | 'altcha'
