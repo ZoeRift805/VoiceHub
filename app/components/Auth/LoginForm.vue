@@ -256,6 +256,16 @@
       </button>
     </form>
 
+     <!-- 人机验证 -->
+    <CaptchaWidget
+      v-if="needCaptcha"
+      ref="captchaRef"
+      provider="turnstile"
+      :site-key="captchaSiteKey"
+      :enabled="needCaptcha"
+      @verify="captchaToken = $event"
+    />
+    
     <div v-if="!isBindMode && isWebAuthnSupported" class="webauthn-section">
       <div class="divider">
         <span>或</span>
@@ -297,8 +307,17 @@ import { getProviderDisplayName } from '~/utils/oauth'
 import { validateOAuthRegisterCredentials } from '~/utils/oauth-register'
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser'
 import { Fingerprint } from 'lucide-vue-next'
-import { usePasswordStrength } from '~/composables/usePasswordStrength'
+import { usePasswordStrength } from '~/composables/usePasswordStrength'  
+import CaptchaWidget from './CaptchaWidget.vue'  
 
+const needCaptcha = ref(false)
+const captchaToken = ref('')
+const captchaRef = ref()
+const captchaSiteKey = ref('')
+// 在 onMounted 中获取公开配置
+const publicConfig = await $fetch('/api/site/public-captcha-config')
+captchaSiteKey.value = publicConfig.siteKey || ''
+  
 const { allowOAuthRegistration, fetchSiteConfig, smtpEnabled } = useSiteConfig()
 
 const route = useRoute()
@@ -420,6 +439,19 @@ const handleLogin = async () => {
     }
   } catch (err) {
     const apiError = err as { data?: { message?: string }, message?: string, statusMessage?: string }
+     // ---------- 人机验证错误处理 ----------
+    if (errorMessage === 'CAPTCHA_REQUIRED') {
+      needCaptcha.value = true
+      captchaRef.value?.reset()
+      error.value = '请完成人机验证后重试'
+      return
+    }
+    if (errorMessage === 'INVALID_CAPTCHA') {
+      captchaRef.value?.reset()
+      error.value = '验证未通过，请重试'
+      return
+    }
+    
     error.value =
       apiError.data?.message || apiError.message || apiError.statusMessage || (isBindMode.value ? '绑定失败，请检查账号密码' : '登录失败，请检查账号密码')
     // 密码错误时清空密码字段
