@@ -42,9 +42,15 @@ export default defineEventHandler(async (event) => {
     '/api/open/', // 开放API路径，由api-auth中间件处理认证
     '/api/auth/webauthn/login', // WebAuthn 登录接口
     '/api/music/state', // 音乐状态同步
-    '/api/music/websocket' // WebSocket 连接
+    '/api/music/websocket',  // WebSocket 连接
+    '/api/site-config', // 可能已有的公开接口
+    '/api/site/public-captcha-config', // 新增
+    '/api/open/' // 你们已有的公开 API 前缀
   ]
-
+  
+  // 验证登录
+  if (url.pathname.startsWith('/api/') && !publicApiPaths.some(p => url.pathname.startsWith(p))) {  
+}
   // 公共路径跳过认证检查
   if (publicApiPaths.some((path) => pathname.startsWith(path))) {
     return
