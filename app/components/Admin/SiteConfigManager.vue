@@ -356,7 +356,10 @@ import {
   Save,
   RotateCcw,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Fingerprint,
+  Eye, 
+  EyeOff            
 } from 'lucide-vue-next'
 import { useToast } from '~/composables/useToast'
 import OAuthConfigManager from './OAuthConfigManager.vue'
@@ -366,6 +369,7 @@ const { showToast: showNotification } = useToast()
 const loading = ref(true)
 const saving = ref(false)
 const saveSuccess = ref(false)
+const showSecret = ref(false)              
 
 // 样式类常量
 const inputClass =
@@ -427,7 +431,16 @@ const formData = ref({
   customOAuthUsernameField: '',
   customOAuthNameField: '',
   customOAuthEmailField: '',
-  customOAuthAvatarField: ''
+  customOAuthAvatarField: '',
+  captchaConfig: {
+    enabled: false,
+    provider: 'turnstile',
+    siteKey: '',
+    secretKey: '',
+    maxAttempts: 3,
+    windowMinutes: 15,
+    sensitiveActions: ['login']
+  }            
 })
 
 const originalData = ref({})
@@ -523,7 +536,16 @@ const loadConfig = async () => {
       customOAuthUsernameField: data.customOAuthUsernameField || '',
       customOAuthNameField: data.customOAuthNameField || '',
       customOAuthEmailField: data.customOAuthEmailField || '',
-      customOAuthAvatarField: data.customOAuthAvatarField || ''
+      customOAuthAvatarField: data.customOAuthAvatarField || '',
+      captchaConfig: {
+  enabled: data.captchaConfig?.enabled ?? false,
+  provider: data.captchaConfig?.provider ?? 'turnstile',
+  siteKey: data.captchaConfig?.siteKey ?? '',
+  secretKey: '', // 安全考虑，后端不应该返回真实 secret，前端永远留空
+  maxAttempts: data.captchaConfig?.maxAttempts ?? 3,
+  windowMinutes: data.captchaConfig?.windowMinutes ?? 15,
+  sensitiveActions: data.captchaConfig?.sensitiveActions ?? ['login']
+}
     }
 
     originalData.value = JSON.parse(JSON.stringify(formData.value))
@@ -541,6 +563,10 @@ const saveConfig = async () => {
     saving.value = true
     const configToSave = {
       ...formData.value,
+      captchaConfig: formData.value.captchaConfig,
+      siteTitle: (formData.value.siteTitle || '').trim() || '校园广播站点歌系统',
+      siteLogoUrl: (formData.value.siteLogoUrl || '').trim() || '/favicon.ico',
+      submissionGuidelines: (formData.value.submissionGuidelines || '').trim() || defaultSubmissionGuidelines,        
       siteTitle: (formData.value.siteTitle || '').trim() || '校园广播站点歌系统',
       siteLogoUrl: (formData.value.siteLogoUrl || '').trim() || '/favicon.ico',
       submissionGuidelines:
