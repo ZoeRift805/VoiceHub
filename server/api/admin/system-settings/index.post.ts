@@ -516,6 +516,30 @@ export default defineEventHandler(async (event) => {
       updateData.customOAuthAvatarField = body.customOAuthAvatarField
     }
 
+    // 人机验证配置
+    if (body.captchaConfig !== undefined) {
+      const cc = body.captchaConfig
+      if (typeof cc !== 'object' || cc === null) {
+        throw createError({ statusCode: 400, message: 'captchaConfig 必须是一个对象' })
+      }
+
+      const prev = settings?.captchaConfig || {}
+
+      const validatedCaptchaConfig: any = {
+        enabled: typeof cc.enabled === 'boolean' ? cc.enabled : (prev.enabled ?? false),
+        provider: ['turnstile', 'hcaptcha', 'altcha'].includes(cc.provider) ? cc.provider : (prev.provider || 'turnstile'),
+        siteKey: cc.siteKey !== undefined ? cc.siteKey : (prev.siteKey || ''),
+        secretKey: (cc.secretKey !== undefined && cc.secretKey !== SECRET_FIELD_MASK) ? cc.secretKey : (prev.secretKey || ''),
+        maxAttempts: Number.isFinite(cc.maxAttempts) && cc.maxAttempts >= 1 && cc.maxAttempts <= 10 ? cc.maxAttempts : (prev.maxAttempts ?? 3),
+        windowMinutes: Number.isFinite(cc.windowMinutes) && cc.windowMinutes >= 1 && cc.windowMinutes <= 60 ? cc.windowMinutes : (prev.windowMinutes ?? 15),
+        sensitiveActions: Array.isArray(cc.sensitiveActions) && cc.sensitiveActions.length > 0
+          ? cc.sensitiveActions.filter((a: string) => ['login', 'register', 'reset_password', 'bind_email'].includes(a))
+          : (prev.sensitiveActions || ['login']),
+      }
+
+      updateData.captchaConfig = validatedCaptchaConfig
+    }
+    
     // 验证每日、每周和每月限额三选一逻辑
     const limitSettings = [
       body.dailySubmissionLimit,
