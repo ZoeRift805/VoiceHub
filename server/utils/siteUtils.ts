@@ -15,6 +15,14 @@ export async function getSiteTitle(): Promise<string> {
   }
 }
 
+let cached: any = null
+export async function getSiteSettings() {
+  if (cached) return cached
+  const rows = await db.select().from(systemSettings).limit(1)
+  cached = rows[0] || {}
+  return cached
+}
+
 /**
  * 姓名脱敏函数，统一返回三个星号
  * @param name 原始姓名
