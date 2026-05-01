@@ -1,4 +1,4 @@
-import {bigint, boolean, integer, pgEnum, pgTable, serial, text, timestamp, uuid, varchar, unique} from 'drizzle-orm/pg-core';
+import {bigint, boolean, integer, pgEnum, pgTable, serial, text, timestamp, uuid, varchar, unique,jsonb,index} from 'drizzle-orm/pg-core';
 import {relations} from 'drizzle-orm';
 
 // 枚举定义
@@ -485,6 +485,33 @@ export const emailTemplates = pgTable('EmailTemplate', {
   html: text('html').notNull(),
   updatedByUserId: integer('updatedByUserId'),
 });
+
+// 登录尝试记录表
+export const loginAttempts = pgTable('login_attempts', {
+  id: serial('id').primaryKey(),
+  username: varchar('username', { length: 255 }).notNull(),
+  ip: varchar('ip', { length: 45 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  usernameIpIdx: index('idx_login_attempts_username_ip').on(table.username, table.ip),
+}))
+
+export const systemSettings = pgTable('system_settings', {
+  id: serial('id').primaryKey(),
+  // ...其他已有字段
+  captchaConfig: jsonb('captcha_config').$type<CaptchaConfig>(),
+  // ...
+})
+
+export interface CaptchaConfig {
+  provider: 'turnstile' | 'hcaptcha' | 'altcha'
+  enabled: boolean
+  siteKey: string
+  secretKey: string
+  maxAttempts: number
+  windowMinutes: number
+  sensitiveActions: string[]
+}
 
 // 导出所有表的类型
 export type User = typeof users.$inferSelect;
