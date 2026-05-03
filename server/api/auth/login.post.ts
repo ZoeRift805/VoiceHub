@@ -25,7 +25,6 @@ export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event) || '127.0.0.1' // 确保已导入 getRequestIP
 
   try {
-    const body = await readBody(event)
     const clientIp = getClientIP(event)
 
     if (!body.username || !body.password) {
@@ -114,7 +113,7 @@ const needCaptcha = captchaConfig?.enabled && (
 )
     
 // 需要验证码但未提供
-if (needsCaptcha && !body.captchaToken) {
+if (needCaptcha && !captchaToken) {
   throw createError({
     statusCode: 400,
     statusMessage: 'Captcha required',
@@ -126,8 +125,8 @@ if (needsCaptcha && !body.captchaToken) {
 }
 
 // Token 验证失败
-if (needsCaptcha && body.captchaToken) {
-  const isValid = await verifyTurnstileToken(body.captchaToken, captchaConfig.secretKey)
+if (needCaptcha && captchaToken) {
+  const isValid = await verifyTurnstileToken(captchaToken, captchaConfig.secretKey)
   if (!isValid) {
     throw createError({
       statusCode: 400,
