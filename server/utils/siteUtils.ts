@@ -17,10 +17,13 @@ export async function getSiteTitle(): Promise<string> {
 
 let cached: any = null
 export async function getSiteSettings() {
-  if (cached) return cached
-  const rows = await db.select().from(systemSettings).limit(1)
-  cached = rows[0] || {}
-  return cached
+  try {
+    const settings = await db.query.siteSettings.findFirst()
+    return settings
+  } catch (error) {
+    console.error('获取站点设置失败:', error)
+    return {}
+  }
 }
 
 /**
