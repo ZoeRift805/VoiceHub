@@ -76,10 +76,10 @@ export const useAuth = () => {
     }
   }
 
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string, captchaToken?: string) => {
     const response = await $fetch<LoginResponse>('/api/auth/login', {
       method: 'POST',
-      body: { username, password }
+      body: { username, password, captchaToken: captchaToken || null }
     })
 
     if (response.success) {
