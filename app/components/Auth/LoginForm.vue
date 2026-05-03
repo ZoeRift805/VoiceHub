@@ -257,15 +257,17 @@
     </form>
 
     <!-- 人机验证组件 -->
-    <NuxtTurnstile
+    <CaptchaWidget
   v-if="needCaptcha && captchaSiteKey"
   ref="captchaRef"
-  v-model:token="captchaToken"
+  provider="turnstile"
   :site-key="captchaSiteKey"
-  :options="{ theme: 'auto', size: 'normal' }"
+  :enabled="needCaptcha"
+  @verify="captchaToken = $event"
   @error="captchaToken = ''"
   @expired="captchaToken = ''"
 />
+    
     <ClientOnly>
   <p v-if="needCaptcha && !captchaSiteKey" class="text-red-400 text-sm text-center mt-4">
     ⚠️ 人机验证服务未配置，请联系管理员。
