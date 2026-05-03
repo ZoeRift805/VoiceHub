@@ -258,15 +258,21 @@
 
     <!-- 人机验证组件 -->
     <CaptchaWidget
-      v-if="needCaptcha"
+      v-if="needCaptcha && captchaSiteKey"
       ref="captchaRef"
       provider="turnstile"
       :site-key="captchaSiteKey"
+      appearance="interaction-only"
       :enabled="needCaptcha"
       @verify="captchaToken = $event"
-      @error="captchaToken = ''"
-      @expired="captchaToken = ''"
+       @error="captchaToken = ''; captchaRef?.reset()"
+      @expired="captchaToken = ''; captchaRef?.reset()"
     />
+    <ClientOnly>
+  <p v-if="needCaptcha && !captchaSiteKey" class="text-red-400 text-sm text-center mt-4">
+    ⚠️ 人机验证服务未配置，请联系管理员。
+  </p>
+</ClientOnly>
     
     <div v-if="!isBindMode && isWebAuthnSupported" class="webauthn-section">
       <div class="divider">
@@ -317,8 +323,6 @@ const captchaToken = ref('')          // 验证完成后获得的 token
 const captchaRef = ref()              // 验证组件的引用，用于 reset()
 const captchaSiteKey = ref('')        // 从服务器获取的公开 site key
 // 在 onMounted 中获取公开配置
-const publicConfig = await $fetch('/api/site/public-captcha-config')
-captchaSiteKey.value = publicConfig.siteKey || ''
   
 const { allowOAuthRegistration, fetchSiteConfig, smtpEnabled } = useSiteConfig()
 
@@ -379,7 +383,7 @@ onMounted(async () => {
   // 兼容外部安全密钥（如 YubiKey），即使没有内置平台认证器也允许尝试
   isWebAuthnSupported.value = isApiSupported
 
-  // 获取人机验证公开配置
+// 获取人机验证公开配置
 try {
   const config = await $fetch('/api/open/public-captcha-config')
   captchaSiteKey.value = config.siteKey || ''
@@ -412,7 +416,7 @@ const handleLogin = async () => {
         method: 'POST',
         body: {
           username: username.value,
-          password: password.value
+          password: password.value,
           captchaToken: needCaptcha.value ? captchaToken.value : null
         }
       })
@@ -430,7 +434,11 @@ const handleLogin = async () => {
       await navigateTo('/')
     } else {
       // 普通登录
-      const response = await auth.login(username.value, password.value)
+      const response = await auth.login(
+      username.value,
+      password.value,
+      needCaptcha.value ? captchaToken.value : null
+    )
 
       if (response.requires2FA) {
         userId2FA.value = response.userId
@@ -449,34 +457,24 @@ const handleLogin = async () => {
       }
     }
   } catch (err) {
-    const apiError = err as { data?: { code?: string; message?: string }; message?: string }
+    const apiError = err as { data?: { code?: string; message?: string }; message?: string; statusMessage?: string }
     const errorCode = apiError?.data?.code || apiError?.message || apiError?.statusMessage || ''
     const errorMsg = apiError?.data?.message || apiError?.message || '登录失败'
-    
-    // ---------- 人机验证错误处理 ----------
-    // 1. 如果需要人机验证，重置并显示组件
+
     if (errorCode === 'CAPTCHA_REQUIRED') {
-        needCaptcha.value = true;
-        captchaRef.value?.reset(); // 重置验证组件
-        error.value = errorMsg;
-        return;
+        needCaptcha.value = true
+        captchaRef.value?.reset()
+        error.value = errorMsg
+        return
     }
-
-    // 2. 如果验证码错误，清空Token让用户重新点击验证
     if (errorCode === 'INVALID_CAPTCHA') {
-        captchaRef.value?.reset();
-        captchaToken.value = ''; // 强制清空过期Token
-        error.value = errorMsg;
-        return;
+        captchaRef.value?.reset()
+        captchaToken.value = ''
+        error.value = errorMsg
+        return
     }
 
-    // 3. 常规错误处理...
-    error.value = errorMsg;
-}
-   
-    error.value =
-      apiError.data?.message || apiError.message || apiError.statusMessage || (isBindMode.value ? '绑定失败，请检查账号密码' : '登录失败，请检查账号密码')
-    // 密码错误时清空密码字段
+    error.value = errorMsg
     if (error.value.includes('密码') || error.value.includes('错误')) {
       password.value = ''
     }
