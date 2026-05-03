@@ -104,15 +104,16 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-      // ---- 人机验证判断 ----
+  // ---- 人机验证判断 ----
   const siteConfig = await getSiteSettings()
   const cc = siteConfig.captchaConfig || {}
-  const needsCaptcha = cc.enabled && (
-    (cc.sensitiveActions || []).includes('login') ||
-    (await getFailedAttempts(username, ip, cc.windowMinutes || 15)) >= (cc.maxAttempts || 3)
-  )
+  const attempts = await getFailedAttempts(username, ip, captchaConfig.windowMinutes || 15);
+  const needCaptcha = captchaConfig?.enabled && (
+  (captchaConfig?.sensitiveActions || []).includes('login') ||
+  attempts >= (captchaConfig.maxAttempts || 3)
+)
     
-  // 需要验证码但未提供
+// 需要验证码但未提供
 if (needsCaptcha && !body.captchaToken) {
   throw createError({
     statusCode: 400,
