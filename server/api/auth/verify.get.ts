@@ -4,12 +4,13 @@ import { executeRedisCommand, isRedisReady } from '../../utils/redis'
 import { eq } from 'drizzle-orm'
 import { JWTEnhanced } from '~~/server/utils/jwt-enhanced'
 import { getCookie } from 'h3'
+import jwt from 'jsonwebtoken'
 
 // 用户认证缓存（永久缓存，登出或权限变更时主动失效）
 
 export default defineEventHandler(async (event) => {
   try {
-    const authUser = event.context.user
+    let authUser = event.context.user
     if (!authUser) {
       const token = getCookie(event, 'auth-token')
       if (!token) {
@@ -18,11 +19,13 @@ export default defineEventHandler(async (event) => {
           message: '未提供认证令牌'
         })
       }
-
       try {
-        // 使用项目内统一的 JWT 工具进行验证
-        const decoded = JWTEnhanced.verify(token)
-        
+        const SECRET_KEY = process.env.JWT_SECRET
+        if (!SECRET_KEY) {
+          console.error('JWT_SECRET environment variable is not set')
+          throw createError({ statusCode: 500, message: '服务器内部错误' })
+        }
+        const decoded = jwt.verify(token, SECRET_KEY)
         authUser = {
           id: decoded.id || decoded.sub,
           role: decoded.role
@@ -34,6 +37,7 @@ export default defineEventHandler(async (event) => {
         })
       }
     }
+
 
     const userId = authUser.id
 
