@@ -105,10 +105,10 @@ export default defineEventHandler(async (event) => {
     }
 
   // ---- 人机验证判断 ----
-  const siteConfig = await getSiteSettings()
-  const cc = siteConfig.captchaConfig || {}
-  const attempts = await getFailedAttempts(username, ip, captchaConfig.windowMinutes || 15);
-  const needCaptcha = captchaConfig?.enabled && (
+const siteConfig = await getSiteSettings()
+const captchaConfig = siteConfig?.captchaConfig || {}  
+const attempts = await getFailedAttempts(username, ip, captchaConfig.windowMinutes || 15);
+const needCaptcha = captchaConfig?.enabled && (
   (captchaConfig?.sensitiveActions || []).includes('login') ||
   attempts >= (captchaConfig.maxAttempts || 3)
 )
