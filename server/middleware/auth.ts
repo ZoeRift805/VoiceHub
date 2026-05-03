@@ -21,9 +21,9 @@ export default defineEventHandler(async (event) => {
 
   // 公共API路径
   const publicApiPaths = [
-    '/api/auth/login',
+    '/api/auth/login',// 登录接口
     '/api/auth/bind', // 账号绑定
-    '/api/auth/oauth-register',
+    '/api/auth/oauth-register', // OAuth 注册
     '/api/auth/2fa/verify',
     '/api/auth/2fa/send-email',
     '/api/auth/forgot-password', // 找回密码
@@ -44,8 +44,9 @@ export default defineEventHandler(async (event) => {
     '/api/music/state', // 音乐状态同步
     '/api/music/websocket',  // WebSocket 连接
     '/api/site-config', // 可能已有的公开接口
-    '/api/site/public-captcha-config', // 新增
-    '/api/open/' // 你们已有的公开 API 前缀
+    '/api/site/public-captcha-config', // 人机验证公开配置
+    '/api/open/', // 已有的公开 API 前缀
+    '/api/sys/time' // 服务器时间
   ]
   
   // 验证登录
