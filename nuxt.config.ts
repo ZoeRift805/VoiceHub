@@ -48,17 +48,11 @@ export default defineNuxtConfig({
   modules: [
     '@nuxtjs/tailwindcss',
     '@vite-pwa/nuxt',
-    '@nuxtjs/turnstile',
     ...(process.env.NODE_ENV === 'development' || process.env.npm_lifecycle_event?.includes('lint')
       ? ['@nuxt/eslint']
       : [])
   ],
 
-// 新增：Turnstile 模块配置
-turnstile: {
-  siteKey: '',   // 从后台动态获取，所以这里留空或写测试 key 也可
-},
-  
   // 引入全局CSS
   css: [
     '~/assets/css/variables.css',
