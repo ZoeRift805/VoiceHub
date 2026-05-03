@@ -257,17 +257,15 @@
     </form>
 
     <!-- 人机验证组件 -->
-    <CaptchaWidget
-      v-if="needCaptcha && captchaSiteKey"
-      ref="captchaRef"
-      provider="turnstile"
-      :site-key="captchaSiteKey"
-      appearance="interaction-only"
-      :enabled="needCaptcha"
-      @verify="captchaToken = $event"
-       @error="captchaToken = ''; captchaRef?.reset()"
-      @expired="captchaToken = ''; captchaRef?.reset()"
-    />
+    <NuxtTurnstile
+  v-if="needCaptcha && captchaSiteKey"
+  ref="captchaRef"
+  v-model:token="captchaToken"
+  :site-key="captchaSiteKey"
+  :options="{ theme: 'auto', size: 'normal' }"
+  @error="captchaToken = ''"
+  @expired="captchaToken = ''"
+/>
     <ClientOnly>
   <p v-if="needCaptcha && !captchaSiteKey" class="text-red-400 text-sm text-center mt-4">
     ⚠️ 人机验证服务未配置，请联系管理员。
@@ -315,8 +313,7 @@ import { getProviderDisplayName } from '~/utils/oauth'
 import { validateOAuthRegisterCredentials } from '~/utils/oauth-register'
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser'
 import { Fingerprint } from 'lucide-vue-next'
-import { usePasswordStrength } from '~/composables/usePasswordStrength'  
-import CaptchaWidget from './CaptchaWidget.vue'  
+import { usePasswordStrength } from '~/composables/usePasswordStrength'    
 
 const needCaptcha = ref(false)        // 是否需要展示验证组件
 const captchaToken = ref('')          // 验证完成后获得的 token
@@ -463,8 +460,9 @@ const handleLogin = async () => {
 
     if (errorCode === 'CAPTCHA_REQUIRED') {
         needCaptcha.value = true
-        captchaRef.value?.reset()
         error.value = errorMsg
+        await nextTick()
+        captchaRef.value?.reset()
         return
     }
     if (errorCode === 'INVALID_CAPTCHA') {
