@@ -449,32 +449,31 @@ const handleLogin = async () => {
       }
     }
   } catch (err) {
-     const apiError = err as {
-    data?: { code?: string; message?: string }
-    message?: string
-  }
-  const errorCode = apiError?.data?.code || ''
-  const errorMsg =
-    apiError?.data?.message ||
-    apiError?.message ||
-    (isBindMode.value ? '绑定失败，请检查账号密码' : '登录失败，请检查账号密码')
+    const apiError = err as { data?: { code?: string; message?: string }; message?: string }
+    const errorCode = apiError?.data?.code || apiError?.message || apiError?.statusMessage || ''
+    const errorMsg = apiError?.data?.message || apiError?.message || '登录失败'
     
-     // ---------- 人机验证错误处理 ----------
-     if (errorCode === 'CAPTCHA_REQUIRED') {
-    needCaptcha.value = true
-    captchaToken.value = ''
-    // 重置验证组件，让它重新加载
-    nextTick(() => captchaRef.value?.reset())
-    error.value = errorMsg || '请完成人机验证后重试'
-    return
-  }
-  if (errorCode === 'INVALID_CAPTCHA') {
-    captchaToken.value = ''
-    nextTick(() => captchaRef.value?.reset())
-    error.value = errorMsg || '验证未通过，请重试'
-    return
-  }
-    
+    // ---------- 人机验证错误处理 ----------
+    // 1. 如果需要人机验证，重置并显示组件
+    if (errorCode === 'CAPTCHA_REQUIRED') {
+        needCaptcha.value = true;
+        captchaRef.value?.reset(); // 重置验证组件
+        error.value = errorMsg;
+        return;
+    }
+
+    // 2. 如果验证码错误，清空Token让用户重新点击验证
+    if (errorCode === 'INVALID_CAPTCHA') {
+        captchaRef.value?.reset();
+        captchaToken.value = ''; // 强制清空过期Token
+        error.value = errorMsg;
+        return;
+    }
+
+    // 3. 常规错误处理...
+    error.value = errorMsg;
+}
+   
     error.value =
       apiError.data?.message || apiError.message || apiError.statusMessage || (isBindMode.value ? '绑定失败，请检查账号密码' : '登录失败，请检查账号密码')
     // 密码错误时清空密码字段
