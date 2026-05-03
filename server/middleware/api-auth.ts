@@ -68,7 +68,14 @@ export default defineEventHandler(async (event) => {
 
   // 获取客户端真实IP地址
   const ipAddress = getClientIP(event)
-
+  // ====== 公开路径豁免 ======
+  const publicOpenPaths = [
+  '/api/open/public-captcha-config',
+]
+if (publicOpenPaths.includes(pathname)) {
+  return  // 无需 API Key，直接放行
+}
+  
   // 检查IP是否被限制
   if (isIPBlocked(ipAddress)) {
     const remainingTime = getIPBlockRemainingTime(ipAddress)
