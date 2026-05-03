@@ -152,6 +152,7 @@ export default defineNuxtConfig({
           href: 'https://cdn.jsdelivr.net/npm/misans@4.1.0/lib/Normal/MiSans-Bold.min.css',
           onload: "this.onload=null;this.rel='stylesheet'"
         }
+        ],
         script: [
         {
           src: 'https://challenges.cloudflare.com/turnstile/v0/api.js',
