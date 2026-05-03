@@ -2,6 +2,8 @@ import { db } from '~/drizzle/db'
 import { users } from '~/drizzle/schema'
 import { executeRedisCommand, isRedisReady } from '../../utils/redis'
 import { eq } from 'drizzle-orm'
+import { JWTEnhanced } from '~~/server/utils/jwt-enhanced'
+import { getCookie } from 'h3'
 
 // 用户认证缓存（永久缓存，登出或权限变更时主动失效）
 
@@ -9,10 +11,28 @@ export default defineEventHandler(async (event) => {
   try {
     const authUser = event.context.user
     if (!authUser) {
-      throw createError({
-        statusCode: 401,
-        message: '未提供认证令牌'
-      })
+      const token = getCookie(event, 'auth-token')
+      if (!token) {
+        throw createError({
+          statusCode: 401,
+          message: '未提供认证令牌'
+        })
+      }
+
+      try {
+        // 使用项目内统一的 JWT 工具进行验证
+        const decoded = JWTEnhanced.verify(token)
+        
+        authUser = {
+          id: decoded.id || decoded.sub,
+          role: decoded.role
+        }
+      } catch (jwtError) {
+        throw createError({
+          statusCode: 401,
+          message: '认证令牌无效或已过期'
+        })
+      }
     }
 
     const userId = authUser.id
