@@ -460,19 +460,13 @@ const handleLogin = async () => {
     const errorCode = apiError?.data?.code || apiError?.message || apiError?.statusMessage || ''
     const errorMsg = apiError?.data?.message || apiError?.message || '登录失败'
 
-    if (errorCode === 'CAPTCHA_REQUIRED') {
-        needCaptcha.value = true
-        error.value = errorMsg
-        await nextTick()
-        captchaRef.value?.reset()
-        return
-    }
-    if (errorCode === 'INVALID_CAPTCHA') {
-        captchaRef.value?.reset()
-        captchaToken.value = ''
-        error.value = errorMsg
-        return
-    }
+    if (errorCode === 'CAPTCHA_REQUIRED' || errorCode === 'INVALID_CAPTCHA') {
+  needCaptcha.value = false
+  await nextTick()
+  needCaptcha.value = true
+  // 由于组件重新挂载，Turnstile 会自动重新渲染并获取新 Token
+  return
+}
 
     error.value = errorMsg
     if (error.value.includes('密码') || error.value.includes('错误')) {
