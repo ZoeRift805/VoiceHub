@@ -413,6 +413,7 @@ const handleLogin = async () => {
         body: {
           username: username.value,
           password: password.value
+          captchaToken: needCaptcha.value ? captchaToken.value : null
         }
       })
 
