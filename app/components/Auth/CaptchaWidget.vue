@@ -1,9 +1,6 @@
+<!-- app/components/CaptchaWidget.vue -->
 <template>
-  <div
-    v-if="enabled && siteKey"
-    ref="containerRef"
-    class="captcha-container flex justify-center"
-  ></div>
+  <div v-if="props.enabled && props.siteKey" ref="containerRef" style="min-height: 65px;"></div>
 </template>
 
 <script setup lang="ts">
@@ -12,9 +9,6 @@ import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 const props = defineProps<{
   siteKey: string
   enabled: boolean
-  provider?: 'turnstile' | 'hcaptcha'
-  theme?: 'light' | 'dark' | 'auto'
-  size?: 'normal' | 'compact'
 }>()
 
 const emit = defineEmits<{
@@ -24,45 +18,61 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLElement>()
-const widgetId = ref('')
-const scriptLoaded = ref(false)
+const widgetId = ref<string>('')
+let scriptLoaded = false
+let scriptLoadingPromise: Promise<void> | null = null
 
-// 动态加载 Turnstile 脚本 (仅一次)
+// 动态加载 Turnstile 脚本 (仅加载一次)
 function loadTurnstileScript(): Promise<void> {
-  return new Promise((resolve) => {
-    if (window.turnstile) {
-      scriptLoaded.value = true
-      resolve()
-      return
-    }
-    const existingScript = document.querySelector(
-      'script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]'
-    )
-    if (existingScript) {
+  if (scriptLoaded) return Promise.resolve()
+  if (scriptLoadingPromise) return scriptLoadingPromise
+
+  if (window.turnstile) {
+    scriptLoaded = true
+    return Promise.resolve()
+  }
+
+  // 检查脚本是否已插入
+  const existingScript = document.querySelector(
+    'script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]'
+  )
+  if (existingScript) {
+    return new Promise((resolve) => {
       existingScript.addEventListener('load', () => {
-        scriptLoaded.value = true
+        scriptLoaded = true
         resolve()
       })
-      return
-    }
+    })
+  }
+
+  // 插入新脚本
+  scriptLoadingPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script')
     script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js'
     script.async = true
     script.defer = true
     script.onload = () => {
-      scriptLoaded.value = true
+      scriptLoaded = true
       resolve()
+    }
+    script.onerror = (err) => {
+      console.error('[CaptchaWidget] 脚本加载失败:', err)
+      reject(err)
     }
     document.head.appendChild(script)
   })
+  return scriptLoadingPromise
 }
 
-// 渲染 Turnstile 组件
+// 渲染小组件
 function renderWidget() {
   if (!containerRef.value || !props.enabled || !props.siteKey) return
-  if (!window.turnstile) return
+  if (!window.turnstile) {
+    console.warn('[CaptchaWidget] window.turnstile 不可用，等待脚本加载')
+    return
+  }
 
-  // 销毁旧实例
+  // 清除旧实例
   if (widgetId.value) {
     window.turnstile.remove(widgetId.value)
     widgetId.value = ''
@@ -71,12 +81,13 @@ function renderWidget() {
 
   widgetId.value = window.turnstile.render(containerRef.value, {
     sitekey: props.siteKey,
-    theme: props.theme || 'auto',
-    size: props.size || 'normal',
+    theme: 'auto',
+    size: 'normal',
     callback: (token: string) => {
       emit('verify', token)
     },
     'error-callback': (err: any) => {
+      console.error('[CaptchaWidget] 小组件错误:', err)
       emit('error', err)
     },
     'expired-callback': () => {
@@ -85,7 +96,7 @@ function renderWidget() {
   })
 }
 
-// 重置并重新渲染 (供外部调用)
+// 外部可调用的重置方法
 function resetWidget() {
   if (widgetId.value) {
     window.turnstile?.remove(widgetId.value)
@@ -106,9 +117,11 @@ defineExpose({
 onMounted(async () => {
   if (!props.enabled) return
   await loadTurnstileScript()
-  // 等待 DOM 挂载
   nextTick(() => {
-    renderWidget()
+    // 额外延迟确保 EdgeOne 环境下的 DOM 完全就绪
+    setTimeout(() => {
+      renderWidget()
+    }, 100)
   })
 })
 
@@ -118,9 +131,3 @@ onBeforeUnmount(() => {
   }
 })
 </script>
-
-<style scoped>
-.captcha-container {
-  min-height: 65px;
-}
-</style>
