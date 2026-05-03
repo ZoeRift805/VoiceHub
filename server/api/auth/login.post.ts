@@ -239,7 +239,7 @@ if (needCaptcha && captchaToken) {
     setCookie(event, 'auth-token', token, {
       httpOnly: true,
       secure: isSecure,
-      sameSite: 'lax',
+      sameSite: 'none',
       maxAge: 60 * 60 * 24 * 7, // 7天
       path: '/'
     })
