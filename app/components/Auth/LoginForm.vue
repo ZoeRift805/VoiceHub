@@ -256,7 +256,7 @@
       </button>
     </form>
 
-     <!-- 人机验证 -->
+    <!-- 人机验证组件 -->
     <CaptchaWidget
       v-if="needCaptcha"
       ref="captchaRef"
@@ -264,6 +264,8 @@
       :site-key="captchaSiteKey"
       :enabled="needCaptcha"
       @verify="captchaToken = $event"
+      @error="captchaToken = ''"
+      @expired="captchaToken = ''"
     />
     
     <div v-if="!isBindMode && isWebAuthnSupported" class="webauthn-section">
@@ -300,7 +302,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useAuth } from '~/composables/useAuth'
 import { useSiteConfig } from '~/composables/useSiteConfig'
 import { getProviderDisplayName } from '~/utils/oauth'
@@ -310,10 +312,10 @@ import { Fingerprint } from 'lucide-vue-next'
 import { usePasswordStrength } from '~/composables/usePasswordStrength'  
 import CaptchaWidget from './CaptchaWidget.vue'  
 
-const needCaptcha = ref(false)
-const captchaToken = ref('')
-const captchaRef = ref()
-const captchaSiteKey = ref('')
+const needCaptcha = ref(false)        // 是否需要展示验证组件
+const captchaToken = ref('')          // 验证完成后获得的 token
+const captchaRef = ref()              // 验证组件的引用，用于 reset()
+const captchaSiteKey = ref('')        // 从服务器获取的公开 site key
 // 在 onMounted 中获取公开配置
 const publicConfig = await $fetch('/api/site/public-captcha-config')
 captchaSiteKey.value = publicConfig.siteKey || ''
@@ -376,6 +378,14 @@ onMounted(async () => {
 
   // 兼容外部安全密钥（如 YubiKey），即使没有内置平台认证器也允许尝试
   isWebAuthnSupported.value = isApiSupported
+
+  // 获取人机验证公开配置
+try {
+  const config = await $fetch('/api/open/public-captcha-config')
+  captchaSiteKey.value = config.siteKey || ''
+} catch (e) {
+  console.warn('获取人机验证配置失败', e)
+}  
 })
 
 const handleLogin = async () => {
@@ -438,19 +448,31 @@ const handleLogin = async () => {
       }
     }
   } catch (err) {
-    const apiError = err as { data?: { message?: string }, message?: string, statusMessage?: string }
+     const apiError = err as {
+    data?: { code?: string; message?: string }
+    message?: string
+  }
+  const errorCode = apiError?.data?.code || ''
+  const errorMsg =
+    apiError?.data?.message ||
+    apiError?.message ||
+    (isBindMode.value ? '绑定失败，请检查账号密码' : '登录失败，请检查账号密码')
+    
      // ---------- 人机验证错误处理 ----------
-    if (errorMessage === 'CAPTCHA_REQUIRED') {
-      needCaptcha.value = true
-      captchaRef.value?.reset()
-      error.value = '请完成人机验证后重试'
-      return
-    }
-    if (errorMessage === 'INVALID_CAPTCHA') {
-      captchaRef.value?.reset()
-      error.value = '验证未通过，请重试'
-      return
-    }
+     if (errorCode === 'CAPTCHA_REQUIRED') {
+    needCaptcha.value = true
+    captchaToken.value = ''
+    // 重置验证组件，让它重新加载
+    nextTick(() => captchaRef.value?.reset())
+    error.value = errorMsg || '请完成人机验证后重试'
+    return
+  }
+  if (errorCode === 'INVALID_CAPTCHA') {
+    captchaToken.value = ''
+    nextTick(() => captchaRef.value?.reset())
+    error.value = errorMsg || '验证未通过，请重试'
+    return
+  }
     
     error.value =
       apiError.data?.message || apiError.message || apiError.statusMessage || (isBindMode.value ? '绑定失败，请检查账号密码' : '登录失败，请检查账号密码')
