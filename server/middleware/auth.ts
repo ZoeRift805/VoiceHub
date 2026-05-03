@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
     '/api/auth/2fa/send-email',
     '/api/auth/forgot-password', // 找回密码
     '/api/auth/reset-password', // 重置密码
-    '/api/auth/verify',
+    '/api/auth/verify', // 验证令牌
     '/api/semesters/current',
     '/api/play-times',
     '/api/schedules/public',
@@ -45,7 +45,6 @@ export default defineEventHandler(async (event) => {
     '/api/music/state', // 音乐状态同步
     '/api/music/websocket',  // WebSocket 连接
     '/api/site-config', // 可能已有的公开接口
-    '/api/site/public-captcha-config', // 人机验证公开配置
     '/api/open/', // 已有的公开 API 前缀
     '/api/sys/time' // 服务器时间
   ]
