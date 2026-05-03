@@ -111,17 +111,34 @@ export default defineEventHandler(async (event) => {
     (cc.sensitiveActions || []).includes('login') ||
     (await getFailedAttempts(username, ip, cc.windowMinutes || 15)) >= (cc.maxAttempts || 3)
   )
-
-  if (needsCaptcha && !captchaToken) {
-    throw createError({ statusCode: 400, message: 'CAPTCHA_REQUIRED' })
-  }
-  if (needsCaptcha && captchaToken) {
-    const valid = await verifyTurnstileToken(captchaToken, cc.secretKey)
-    if (!valid) {
-      throw createError({ statusCode: 400, message: 'INVALID_CAPTCHA' })
-    }
-  }
     
+  // 需要验证码但未提供
+if (needsCaptcha && !body.captchaToken) {
+  throw createError({
+    statusCode: 400,
+    statusMessage: 'Captcha required',
+    data: {
+      code: 'CAPTCHA_REQUIRED',
+      message: '请完成人机验证后重试'
+    }
+  })
+}
+
+// Token 验证失败
+if (needsCaptcha && body.captchaToken) {
+  const isValid = await verifyTurnstileToken(body.captchaToken, captchaConfig.secretKey)
+  if (!isValid) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Invalid captcha',
+      data: {
+        code: 'INVALID_CAPTCHA',
+        message: '验证未通过，请重试'
+      }
+    })
+  }
+}
+
     // 验证密码
     const isPasswordValid = await bcrypt.compare(body.password, user.password)
     if (!isPasswordValid) {
