@@ -1,23 +1,21 @@
 <template>
-  <div v-if="ready" ref="containerRef" class="captcha-container flex justify-center transition-opacity duration-300"
-    :class="{ 'opacity-0': !visible, 'opacity-100': visible }"></div>
+  <div
+    v-if="enabled && siteKey"
+    ref="containerRef"
+    class="captcha-container flex justify-center"
+  ></div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
-const props = withDefaults(defineProps<{
-  provider?: 'turnstile' | 'hcaptcha'
+const props = defineProps<{
   siteKey: string
-  enabled?: boolean
+  enabled: boolean
+  provider?: 'turnstile' | 'hcaptcha'
   theme?: 'light' | 'dark' | 'auto'
   size?: 'normal' | 'compact'
-}>(), {
-  provider: 'turnstile',
-  enabled: true,
-  theme: 'auto',
-  size: 'normal',
-})
+}>()
 
 const emit = defineEmits<{
   (e: 'verify', token: string): void
@@ -27,66 +25,102 @@ const emit = defineEmits<{
 
 const containerRef = ref<HTMLElement>()
 const widgetId = ref('')
-const ready = ref(false)
-const visible = ref(false)
 const scriptLoaded = ref(false)
 
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { scriptLoaded.value = true; resolve(); return }
+// 动态加载 Turnstile 脚本 (仅一次)
+function loadTurnstileScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (window.turnstile) {
+      scriptLoaded.value = true
+      resolve()
+      return
+    }
+    const existingScript = document.querySelector(
+      'script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]'
+    )
+    if (existingScript) {
+      existingScript.addEventListener('load', () => {
+        scriptLoaded.value = true
+        resolve()
+      })
+      return
+    }
     const script = document.createElement('script')
-    script.src = src; script.async = true; script.defer = true
-    script.onload = () => { scriptLoaded.value = true; resolve() }
-    script.onerror = (err) => reject(err)
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js'
+    script.async = true
+    script.defer = true
+    script.onload = () => {
+      scriptLoaded.value = true
+      resolve()
+    }
     document.head.appendChild(script)
   })
 }
 
-async function initProvider() {
-  if (props.provider === 'turnstile') await loadScript('https://challenges.cloudflare.com/turnstile/v0/api.js')
-  else if (props.provider === 'hcaptcha') await loadScript('https://js.hcaptcha.com/1/api.js')
-}
-
+// 渲染 Turnstile 组件
 function renderWidget() {
-  if (!containerRef.value || !props.siteKey || !props.enabled) return
-  if (props.provider === 'turnstile' && window.turnstile) {
-    widgetId.value = window.turnstile.render(containerRef.value, {
-      sitekey: props.siteKey, theme: props.theme, size: props.size,
-      callback: (token: string) => emit('verify', token),
-      'error-callback': (err: any) => emit('error', err),
-      'expired-callback': () => { emit('expired'); resetWidget() },
-    })
-  } else if (props.provider === 'hcaptcha' && window.hcaptcha) {
-    widgetId.value = window.hcaptcha.render(containerRef.value, {
-      sitekey: props.siteKey, theme: props.theme, size: props.size,
-      callback: (token: string) => emit('verify', token),
-      'error-callback': (err: any) => emit('error', err),
-      'expired-callback': () => { emit('expired'); resetWidget() },
-    })
+  if (!containerRef.value || !props.enabled || !props.siteKey) return
+  if (!window.turnstile) return
+
+  // 销毁旧实例
+  if (widgetId.value) {
+    window.turnstile.remove(widgetId.value)
+    widgetId.value = ''
   }
-  visible.value = true
+  containerRef.value.innerHTML = ''
+
+  widgetId.value = window.turnstile.render(containerRef.value, {
+    sitekey: props.siteKey,
+    theme: props.theme || 'auto',
+    size: props.size || 'normal',
+    callback: (token: string) => {
+      emit('verify', token)
+    },
+    'error-callback': (err: any) => {
+      emit('error', err)
+    },
+    'expired-callback': () => {
+      emit('expired')
+    },
+  })
 }
 
+// 重置并重新渲染 (供外部调用)
 function resetWidget() {
-  if (props.provider === 'turnstile' && widgetId.value && window.turnstile) window.turnstile.reset(widgetId.value)
-  else if (props.provider === 'hcaptcha' && widgetId.value && window.hcaptcha) window.hcaptcha.reset(widgetId.value)
+  if (widgetId.value) {
+    window.turnstile?.remove(widgetId.value)
+    widgetId.value = ''
+  }
+  if (containerRef.value) {
+    containerRef.value.innerHTML = ''
+  }
+  nextTick(() => {
+    renderWidget()
+  })
 }
 
-defineExpose({ reset: resetWidget, reload: () => { visible.value = false; nextTick(() => { if (containerRef.value) containerRef.value.innerHTML = ''; widgetId.value = ''; renderWidget() }) } })
+defineExpose({
+  reset: resetWidget,
+})
 
 onMounted(async () => {
   if (!props.enabled) return
-  try { await initProvider(); ready.value = true; await nextTick(); if (containerRef.value) renderWidget() }
-  catch (err) { console.error('验证组件加载失败', err) }
+  await loadTurnstileScript()
+  // 等待 DOM 挂载
+  nextTick(() => {
+    renderWidget()
+  })
 })
 
 onBeforeUnmount(() => {
-  if (widgetId.value && props.provider === 'turnstile' && window.turnstile) window.turnstile.remove(widgetId.value)
-  else if (widgetId.value && props.provider === 'hcaptcha' && window.hcaptcha) window.hcaptcha.remove(widgetId.value)
-})
-
-watch(() => props.enabled, (val) => {
-  if (val && !widgetId.value && ready.value) nextTick(() => renderWidget())
-  else if (!val) visible.value = false
+  if (widgetId.value) {
+    window.turnstile?.remove(widgetId.value)
+  }
 })
 </script>
+
+<style scoped>
+.captcha-container {
+  min-height: 65px;
+}
+</style>
