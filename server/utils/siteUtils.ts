@@ -6,8 +6,8 @@ import { systemSettings } from '~/drizzle/schema'
  */
 export async function getSiteTitle(): Promise<string> {
   try {
-    const settingsResult = await db.select().from(systemSettings).limit(1)
-    const settings = settingsResult[0]
+    const rows = await db.select().from(systemSettings).limit(1)
+    const settings = rows[0]
     return settings?.siteTitle || process.env.NUXT_PUBLIC_SITE_TITLE || 'VoiceHub'
   } catch (error) {
     console.error('获取站点标题失败:', error)
@@ -18,8 +18,8 @@ export async function getSiteTitle(): Promise<string> {
 let cached: any = null
 export async function getSiteSettings() {
   try {
-    const settings = await db.query.siteSettings.findFirst()
-    return settings
+    const rows = await db.select().from(systemSettings).limit(1)
+    return rows[0] || {}
   } catch (error) {
     console.error('获取站点设置失败:', error)
     return {}
