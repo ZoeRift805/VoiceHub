@@ -1,13 +1,16 @@
 import { eq } from 'drizzle-orm'
 import { db } from '~/drizzle/db'
 import { notificationSettings, pushSubscriptions } from '~/drizzle/schema'
-import { isWebPushConfigured } from '~~/server/services/webPushService'
+import {
+  getWebPushConfiguration,
+  isWebPushConfigured
+} from '~~/server/services/webPushService'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
   if (!user) throw createError({ statusCode: 401, message: '需要登录才能查看推送状态' })
 
-  const [subscriptions, settings] = await Promise.all([
+  const [subscriptions, settings, configuration, configured] = await Promise.all([
     db
       .select({ id: pushSubscriptions.id })
       .from(pushSubscriptions)
@@ -16,13 +19,17 @@ export default defineEventHandler(async (event) => {
       .select({ webPushEnabled: notificationSettings.webPushEnabled })
       .from(notificationSettings)
       .where(eq(notificationSettings.userId, user.id))
-      .limit(1)
+      .limit(1),
+    getWebPushConfiguration(),
+    isWebPushConfigured()
   ])
 
   return {
     success: true,
     data: {
-      configured: isWebPushConfigured(),
+      configured,
+      publicKey: configured ? configuration.publicKey : '',
+      source: configuration.source,
       enabled: Boolean(settings[0]?.webPushEnabled && subscriptions.length > 0),
       deviceCount: subscriptions.length
     }

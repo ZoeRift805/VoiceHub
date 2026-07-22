@@ -3,6 +3,7 @@ import { and, eq, gte, isNull, lte } from 'drizzle-orm'
 import { db } from '~/drizzle/db'
 import { playTimes, schedules, songs } from '~/drizzle/schema'
 import { createBroadcastReminderNotification } from '~~/server/services/notificationService'
+import { getWebPushConfiguration } from '~~/server/services/webPushService'
 import { formatDateTime, parseToBeijingTime } from '~/utils/timeUtils'
 
 function secretsMatch(actual: string, expected: string) {
@@ -14,8 +15,8 @@ function secretsMatch(actual: string, expected: string) {
 }
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig()
-  const expectedSecret = String(config.webPush.cronSecret || '')
+  const configuration = await getWebPushConfiguration()
+  const expectedSecret = configuration.cronSecret
   if (!expectedSecret) {
     throw createError({ statusCode: 503, message: '播出提醒任务尚未配置' })
   }
@@ -26,10 +27,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: '内部任务认证失败' })
   }
 
-  const reminderMinutes = Math.min(
-    1440,
-    Math.max(1, Math.round(Number(config.webPush.reminderMinutes) || 10))
-  )
+  const reminderMinutes = configuration.reminderMinutes
   const now = new Date()
   const searchStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const searchEnd = new Date(now.getTime() + 48 * 60 * 60 * 1000)

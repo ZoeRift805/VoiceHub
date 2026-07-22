@@ -53,7 +53,14 @@ export default defineEventHandler(async (event) => {
       settings = newSettingsResult[0]
     }
 
-    return maskSystemSettingsSecrets(settings)
+    const config = useRuntimeConfig()
+    const webPushEnvironmentConfigured = Boolean(
+      String(config.public.webPushPublicKey || '').trim() &&
+        String(config.webPush.privateKey || '').trim() &&
+        /^(mailto:|https:\/\/)/.test(String(config.webPush.subject || '').trim())
+    )
+
+    return maskSystemSettingsSecrets({ ...settings, webPushEnvironmentConfigured })
   } catch (error) {
     console.error('获取系统设置失败:', error)
     throw createError({

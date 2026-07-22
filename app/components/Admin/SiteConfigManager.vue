@@ -506,6 +506,102 @@
         </div>
       </section>
 
+      <!-- Web Push 配置 -->
+      <section
+        class="lg:col-span-2 bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 space-y-6"
+      >
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+          <h3
+            class="text-sm font-black text-zinc-100 uppercase tracking-widest flex items-center gap-2"
+          >
+            <BellRing :size="16" class="text-sky-500" /> Web Push
+          </h3>
+          <div class="flex items-center gap-3">
+            <span
+              class="px-2 py-1 border border-zinc-800 rounded-md text-[10px] font-bold text-zinc-500"
+            >
+              {{ webPushStatusText }}
+            </span>
+            <button
+              type="button"
+              :disabled="generatingPushKeys"
+              class="inline-flex items-center gap-2 px-3 py-2 bg-zinc-950 border border-zinc-800 text-zinc-300 hover:border-zinc-700 text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+              @click="generateWebPushKeys"
+            >
+              <RefreshCw :size="14" :class="{ 'animate-spin': generatingPushKeys }" />
+              生成新密钥
+            </button>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <span class="text-xs font-bold text-zinc-300">启用</span>
+              <input
+                v-model="formData.webPushEnabled"
+                type="checkbox"
+                class="w-5 h-5 rounded border-zinc-800 bg-zinc-900 accent-blue-600 cursor-pointer"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="lg:col-span-2">
+            <label :class="labelClass">VAPID 公钥</label>
+            <input
+              v-model="formData.webPushPublicKey"
+              type="text"
+              autocomplete="off"
+              placeholder="VAPID Public Key"
+              :class="[inputClass, 'font-mono text-xs']"
+            />
+          </div>
+          <div>
+            <label :class="labelClass">VAPID 私钥</label>
+            <input
+              v-model="formData.webPushPrivateKey"
+              type="password"
+              autocomplete="new-password"
+              placeholder="VAPID Private Key"
+              :class="[inputClass, 'font-mono text-xs']"
+            />
+          </div>
+          <div>
+            <label :class="labelClass">联系地址</label>
+            <input
+              v-model="formData.webPushSubject"
+              type="text"
+              placeholder="mailto:admin@example.com"
+              :class="inputClass"
+            />
+          </div>
+          <div>
+            <label :class="labelClass">定时任务密钥</label>
+            <input
+              v-model="formData.webPushCronSecret"
+              type="password"
+              autocomplete="new-password"
+              placeholder="至少 16 个字符"
+              :class="[inputClass, 'font-mono text-xs']"
+            />
+          </div>
+          <div>
+            <label :class="labelClass">播出提醒提前分钟数</label>
+            <input
+              v-model.number="formData.webPushReminderMinutes"
+              type="number"
+              min="1"
+              max="1440"
+              :class="inputClass"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3 p-3 bg-sky-500/5 border border-sky-500/10 rounded-lg">
+          <KeyRound :size="14" class="text-sky-500 shrink-0 mt-0.5" />
+          <p class="text-[10px] text-zinc-500 leading-relaxed">
+            后台配置启用后会覆盖环境变量。更换 VAPID 密钥会清理旧设备订阅，用户再次进入通知设置时会自动重新绑定。
+          </p>
+        </div>
+      </section>
+
       <!-- 投稿须知 -->
       <section
         class="lg:col-span-2 bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 space-y-6"
@@ -572,7 +668,10 @@ import {
   Save,
   RotateCcw,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  BellRing,
+  KeyRound,
+  RefreshCw
 } from '@lucide/vue'
 import { useToast } from '~/composables/useToast'
 import { renderMarkdown } from '~/utils/markdown'
@@ -584,6 +683,8 @@ const { showToast: showNotification } = useToast()
 const loading = ref(true)
 const saving = ref(false)
 const saveSuccess = ref(false)
+const generatingPushKeys = ref(false)
+const webPushEnvironmentConfigured = ref(false)
 const editMode = ref('edit') // 投稿须知编辑/预览模式
 
 // 投稿须知 Markdown 预览
@@ -664,7 +765,13 @@ const formData = ref({
   customOAuthUsernameField: '',
   customOAuthNameField: '',
   customOAuthEmailField: '',
-  customOAuthAvatarField: ''
+  customOAuthAvatarField: '',
+  webPushEnabled: false,
+  webPushPublicKey: '',
+  webPushPrivateKey: '',
+  webPushSubject: '',
+  webPushCronSecret: '',
+  webPushReminderMinutes: 10
 })
 
 const originalData = ref({})
@@ -701,6 +808,12 @@ const currentLimitValue = computed({
   }
 })
 
+const webPushStatusText = computed(() => {
+  if (formData.value.webPushEnabled) return '后台配置'
+  if (webPushEnvironmentConfigured.value) return '环境变量'
+  return '未启用'
+})
+
 // 加载配置
 const loadConfig = async () => {
   try {
@@ -712,6 +825,7 @@ const loadConfig = async () => {
     if (!response.ok) throw new Error('获取配置失败')
 
     const data = await response.json()
+    webPushEnvironmentConfigured.value = !!data.webPushEnvironmentConfigured
 
     syncActiveLimitTab(data)
 
@@ -775,7 +889,13 @@ const loadConfig = async () => {
       customOAuthUsernameField: data.customOAuthUsernameField || '',
       customOAuthNameField: data.customOAuthNameField || '',
       customOAuthEmailField: data.customOAuthEmailField || '',
-      customOAuthAvatarField: data.customOAuthAvatarField || ''
+      customOAuthAvatarField: data.customOAuthAvatarField || '',
+      webPushEnabled: !!data.webPushEnabled,
+      webPushPublicKey: data.webPushPublicKey || '',
+      webPushPrivateKey: data.webPushPrivateKey || '',
+      webPushSubject: data.webPushSubject || '',
+      webPushCronSecret: data.webPushCronSecret || '',
+      webPushReminderMinutes: data.webPushReminderMinutes ?? 10
     }
 
     originalData.value = JSON.parse(JSON.stringify(formData.value))
@@ -835,8 +955,13 @@ const saveConfig = async () => {
       throw new Error(message)
     }
 
+    const savedData = await response.json()
     saveSuccess.value = true
-    formData.value = { ...configToSave }
+    formData.value = {
+      ...configToSave,
+      webPushPrivateKey: savedData.webPushPrivateKey || '',
+      webPushCronSecret: savedData.webPushCronSecret || ''
+    }
     originalData.value = JSON.parse(JSON.stringify(formData.value))
     localStorage.setItem(
       'voicehub.telemetryEnabled',
@@ -872,6 +997,58 @@ const handleLimitTypeChange = (type) => {
   const targetLimit = limits[type]
   if (formData.value[targetLimit.key] === null) {
     formData.value[targetLimit.key] = targetLimit.default
+  }
+}
+
+const decodeBase64Url = (value) => {
+  const padding = '='.repeat((4 - (value.length % 4)) % 4)
+  const binary = window.atob((value + padding).replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
+}
+
+const encodeBase64Url = (value) => {
+  let binary = ''
+  for (const byte of value) binary += String.fromCharCode(byte)
+  return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+const generateWebPushKeys = async () => {
+  generatingPushKeys.value = true
+  try {
+    const keyPair = await window.crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify']
+    )
+    const [publicJwk, privateJwk] = await Promise.all([
+      window.crypto.subtle.exportKey('jwk', keyPair.publicKey),
+      window.crypto.subtle.exportKey('jwk', keyPair.privateKey)
+    ])
+    if (!publicJwk.x || !publicJwk.y || !privateJwk.d) {
+      throw new Error('浏览器未返回完整密钥')
+    }
+
+    const x = decodeBase64Url(publicJwk.x)
+    const y = decodeBase64Url(publicJwk.y)
+    const publicKey = new Uint8Array(1 + x.length + y.length)
+    publicKey[0] = 4
+    publicKey.set(x, 1)
+    publicKey.set(y, 1 + x.length)
+
+    const cronSecret = new Uint8Array(32)
+    window.crypto.getRandomValues(cronSecret)
+
+    formData.value.webPushPublicKey = encodeBase64Url(publicKey)
+    formData.value.webPushPrivateKey = privateJwk.d
+    formData.value.webPushCronSecret = encodeBase64Url(cronSecret)
+    formData.value.webPushSubject ||= 'mailto:admin@example.com'
+    formData.value.webPushEnabled = true
+    showNotification('Web Push 密钥已生成，请保存配置', 'success')
+  } catch (error) {
+    console.error('生成 Web Push 密钥失败:', error)
+    showNotification(error?.message || '生成 Web Push 密钥失败', 'error')
+  } finally {
+    generatingPushKeys.value = false
   }
 }
 

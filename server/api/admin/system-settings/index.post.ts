@@ -1,6 +1,7 @@
 import { db } from '~/drizzle/db'
-import { systemSettings } from '~/drizzle/schema'
+import { pushSubscriptions, systemSettings } from '~/drizzle/schema'
 import { eq } from 'drizzle-orm'
+import { createECDH } from 'node:crypto'
 import { SMTP_PASSWORD_MASK, SECRET_FIELD_MASK, maskSystemSettingsSecrets } from './secretMask'
 import { SYSTEM_SETTINGS_DEFAULTS } from '../../../utils/system-settings-defaults'
 import {
@@ -8,6 +9,56 @@ import {
   isSafeAggregateOAuthUrl,
   normalizeAggregateOAuthLoginTypes
 } from '~~/server/utils/oauth-providers'
+
+const normalizeOptionalText = (value: unknown, fieldName: string, maxLength: number) => {
+  if (value === null || value === '') return null
+  if (typeof value !== 'string') {
+    throw createError({ statusCode: 400, message: `${fieldName} 必须是字符串` })
+  }
+
+  const normalized = value.trim()
+  if (!normalized) return null
+  if (normalized.length > maxLength) {
+    throw createError({ statusCode: 400, message: `${fieldName} 长度不能超过 ${maxLength}` })
+  }
+  return normalized
+}
+
+const isValidVapidPublicKey = (value: string) => {
+  try {
+    const decoded = Buffer.from(value, 'base64url')
+    return decoded.length === 65 && decoded[0] === 4
+  } catch {
+    return false
+  }
+}
+
+const isValidVapidPrivateKey = (value: string) => {
+  try {
+    return Buffer.from(value, 'base64url').length === 32
+  } catch {
+    return false
+  }
+}
+
+const vapidKeysMatch = (publicKey: string, privateKey: string) => {
+  try {
+    const ecdh = createECDH('prime256v1')
+    ecdh.setPrivateKey(Buffer.from(privateKey, 'base64url'))
+    return Buffer.from(publicKey, 'base64url').equals(ecdh.getPublicKey())
+  } catch {
+    return false
+  }
+}
+
+const isValidWebPushSubject = (value: string) => {
+  if (/^mailto:[^\s@]+@[^\s@]+$/.test(value)) return true
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 export default defineEventHandler(async (event) => {
   // 检查用户认证和权限
@@ -357,6 +408,111 @@ export default defineEventHandler(async (event) => {
 
     if (body.smtpFromName !== undefined) {
       updateData.smtpFromName = body.smtpFromName
+    }
+
+    // Web Push 配置字段
+    if (body.webPushEnabled !== undefined) {
+      if (typeof body.webPushEnabled !== 'boolean') {
+        throw createError({ statusCode: 400, message: 'webPushEnabled 必须是布尔值' })
+      }
+      updateData.webPushEnabled = body.webPushEnabled
+    }
+
+    if (body.webPushPublicKey !== undefined) {
+      updateData.webPushPublicKey = normalizeOptionalText(
+        body.webPushPublicKey,
+        'VAPID 公钥',
+        512
+      )
+    }
+
+    if (
+      body.webPushPrivateKey !== undefined &&
+      body.webPushPrivateKey !== SECRET_FIELD_MASK
+    ) {
+      updateData.webPushPrivateKey = normalizeOptionalText(
+        body.webPushPrivateKey,
+        'VAPID 私钥',
+        512
+      )
+    }
+
+    if (body.webPushSubject !== undefined) {
+      updateData.webPushSubject = normalizeOptionalText(
+        body.webPushSubject,
+        'Web Push 联系地址',
+        512
+      )
+    }
+
+    if (body.webPushCronSecret !== undefined && body.webPushCronSecret !== SECRET_FIELD_MASK) {
+      updateData.webPushCronSecret = normalizeOptionalText(
+        body.webPushCronSecret,
+        '定时任务密钥',
+        512
+      )
+    }
+
+    if (body.webPushReminderMinutes !== undefined) {
+      if (
+        !Number.isInteger(body.webPushReminderMinutes) ||
+        body.webPushReminderMinutes < 1 ||
+        body.webPushReminderMinutes > 1440
+      ) {
+        throw createError({
+          statusCode: 400,
+          message: '播出提醒提前分钟数必须是 1-1440 之间的整数'
+        })
+      }
+      updateData.webPushReminderMinutes = body.webPushReminderMinutes
+    }
+
+    const nextWebPushEnabled =
+      body.webPushEnabled !== undefined
+        ? body.webPushEnabled
+        : (settings?.webPushEnabled ?? false)
+    const nextWebPushPublicKey =
+      body.webPushPublicKey !== undefined
+        ? updateData.webPushPublicKey
+        : settings?.webPushPublicKey
+    const nextWebPushPrivateKey =
+      body.webPushPrivateKey !== undefined && body.webPushPrivateKey !== SECRET_FIELD_MASK
+        ? updateData.webPushPrivateKey
+        : settings?.webPushPrivateKey
+    const nextWebPushSubject =
+      body.webPushSubject !== undefined ? updateData.webPushSubject : settings?.webPushSubject
+    const nextWebPushCronSecret =
+      body.webPushCronSecret !== undefined && body.webPushCronSecret !== SECRET_FIELD_MASK
+        ? updateData.webPushCronSecret
+        : settings?.webPushCronSecret
+
+    if (nextWebPushEnabled) {
+      if (
+        !nextWebPushPublicKey ||
+        !nextWebPushPrivateKey ||
+        !nextWebPushSubject ||
+        !nextWebPushCronSecret
+      ) {
+        throw createError({ statusCode: 400, message: '启用 Web Push 前请完整填写所有配置' })
+      }
+      if (!isValidVapidPublicKey(nextWebPushPublicKey)) {
+        throw createError({ statusCode: 400, message: 'VAPID 公钥格式无效' })
+      }
+      if (!isValidVapidPrivateKey(nextWebPushPrivateKey)) {
+        throw createError({ statusCode: 400, message: 'VAPID 私钥格式无效' })
+      }
+      if (!vapidKeysMatch(nextWebPushPublicKey, nextWebPushPrivateKey)) {
+        throw createError({ statusCode: 400, message: 'VAPID 公钥与私钥不匹配' })
+      }
+      if (!isValidWebPushSubject(nextWebPushSubject)) {
+        throw createError({
+          statusCode: 400,
+          message: 'Web Push 联系地址必须是 mailto:邮箱或 HTTPS URL'
+        })
+      }
+      if (nextWebPushCronSecret.length < 16) {
+        throw createError({ statusCode: 400, message: '定时任务密钥至少需要 16 个字符' })
+      }
     }
 
     // OAuth 配置字段
@@ -751,6 +907,31 @@ export default defineEventHandler(async (event) => {
       } catch (telemetryError) {
         console.warn('[Telemetry] 遥测开关缓存更新失败:', telemetryError)
       }
+    }
+
+    const webPushIdentityChanged =
+      (updateData.webPushEnabled !== undefined &&
+        updateData.webPushEnabled !== settingsResult[0]?.webPushEnabled) ||
+      (updateData.webPushPublicKey !== undefined &&
+        updateData.webPushPublicKey !== settingsResult[0]?.webPushPublicKey) ||
+      (updateData.webPushPrivateKey !== undefined &&
+        updateData.webPushPrivateKey !== settingsResult[0]?.webPushPrivateKey)
+
+    if (webPushIdentityChanged) {
+      try {
+        await db.delete(pushSubscriptions)
+      } catch (subscriptionError) {
+        console.warn('[WebPush] 清理旧设备订阅失败:', subscriptionError)
+      }
+    }
+
+    try {
+      const { invalidateWebPushConfiguration } = await import(
+        '~~/server/services/webPushService'
+      )
+      invalidateWebPushConfiguration()
+    } catch (webPushError) {
+      console.warn('[WebPush] 配置缓存更新失败:', webPushError)
     }
 
     try {

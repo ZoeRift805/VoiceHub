@@ -254,8 +254,8 @@ function printBuildEnvironment(rawNodeOptions) {
     isProvided(process.env.WEB_PUSH_PRIVATE_KEY) &&
       isProvided(process.env.NUXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || process.env.WEB_PUSH_PUBLIC_KEY) &&
       isProvided(process.env.WEB_PUSH_SUBJECT)
-      ? '启用'
-      : '停用'
+      ? '环境变量已配置'
+      : '环境变量未配置，可在管理员后台启用'
   )
   printSensitiveItem('WEB_PUSH_PRIVATE_KEY', process.env.WEB_PUSH_PRIVATE_KEY)
   printSensitiveItem('WEB_PUSH_CRON_SECRET', process.env.WEB_PUSH_CRON_SECRET)

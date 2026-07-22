@@ -682,7 +682,7 @@ VoiceHub 实现了细粒度的权限控制系统：
 | WEB_PUSH_CRON_SECRET   | 否   | 播出前提醒内部定时任务密钥                              | `strong-random-secret`                                                                                                                           |
 | WEB_PUSH_REMINDER_MINUTES | 否 | 提前多少分钟发送播出提醒                                | `10`                                                                                                                                             |
 
-Web Push 密钥可通过 `pnpm exec web-push generate-vapid-keys` 生成。播出前提醒需由定时任务每分钟请求 `POST /api/internal/notifications/broadcast-reminders`，并携带 `Authorization: Bearer <WEB_PUSH_CRON_SECRET>`。
+Web Push 可在管理员后台的“站点配置 → Web Push”中直接生成并保存密钥，后台配置启用后优先于环境变量；环境变量仍可作为首次部署和故障回退。播出前提醒需由定时任务每分钟请求 `POST /api/internal/notifications/broadcast-reminders`，并携带当前有效配置中的 Cron 密钥。对应数据库字段由 `app/drizzle/migrations/20260722010000_add_web_push_admin_config.sql` 添加。
 
 Redis 不参与歌曲、排期、点赞或用户资料缓存。迁移旧部署时可先执行 dry-run：
 

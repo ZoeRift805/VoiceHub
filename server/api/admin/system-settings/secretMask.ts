@@ -7,6 +7,12 @@ export const maskSystemSettingsSecrets = <T extends Record<string, any>>(setting
   return {
     ...settings,
     smtpPassword: settings.smtpPassword ? SMTP_PASSWORD_MASK : settings.smtpPassword,
+    webPushPrivateKey: settings.webPushPrivateKey
+      ? SECRET_FIELD_MASK
+      : settings.webPushPrivateKey,
+    webPushCronSecret: settings.webPushCronSecret
+      ? SECRET_FIELD_MASK
+      : settings.webPushCronSecret,
     oauthStateSecret: settings.oauthStateSecret ? SECRET_FIELD_MASK : settings.oauthStateSecret,
     githubClientSecret: settings.githubClientSecret ? SECRET_FIELD_MASK : settings.githubClientSecret,
     casdoorClientSecret: settings.casdoorClientSecret ? SECRET_FIELD_MASK : settings.casdoorClientSecret,

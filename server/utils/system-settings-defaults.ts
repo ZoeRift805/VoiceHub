@@ -40,6 +40,12 @@ export const SYSTEM_SETTINGS_DEFAULTS = {
   smtpPassword: null,
   smtpFromEmail: null,
   smtpFromName: '校园广播站',
+  webPushEnabled: false,
+  webPushPublicKey: null,
+  webPushPrivateKey: null,
+  webPushSubject: null,
+  webPushCronSecret: null,
+  webPushReminderMinutes: 10,
   allowOAuthRegistration: false,
   captchaEnabled: false, // 默认关闭图形验证码
   captchaMaxFailures: 3, //触发阈值

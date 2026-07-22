@@ -158,6 +158,12 @@ export interface SystemSettings {
   enableCardCodeRequests?: boolean
   requireCardCodeForRequests?: boolean
   enableCardCodeLimitBypass?: boolean
+  webPushEnabled?: boolean
+  webPushPublicKey?: string | null
+  webPushPrivateKey?: string | null
+  webPushSubject?: string | null
+  webPushCronSecret?: string | null
+  webPushReminderMinutes?: number
 }
 
 export interface RequestTime {

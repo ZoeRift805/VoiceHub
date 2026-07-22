@@ -246,6 +246,13 @@
       "when": 1784678400000,
       "tag": "20260722000000_add_web_push_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784682000000,
+      "tag": "20260722010000_add_web_push_admin_config",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import webpush from 'web-push'
 import { and, eq } from 'drizzle-orm'
 import { db } from '~/drizzle/db'
-import { notificationSettings, pushSubscriptions } from '~/drizzle/schema'
+import { notificationSettings, pushSubscriptions, systemSettings } from '~/drizzle/schema'
 
 export interface WebPushPayload {
   title: string
@@ -18,20 +18,114 @@ export interface WebPushResult {
   configured: boolean
 }
 
+export interface WebPushConfiguration {
+  publicKey: string
+  privateKey: string
+  subject: string
+  cronSecret: string
+  reminderMinutes: number
+  configured: boolean
+  source: 'database' | 'environment'
+}
+
 let configuredFingerprint = ''
+let configurationCache: { value: WebPushConfiguration; expiresAt: number } | null = null
 
-function configureWebPush() {
+export function invalidateWebPushConfiguration() {
+  configurationCache = null
+  configuredFingerprint = ''
+}
+
+export async function getWebPushConfiguration(): Promise<WebPushConfiguration> {
+  if (configurationCache && configurationCache.expiresAt > Date.now()) {
+    return configurationCache.value
+  }
+
   const config = useRuntimeConfig()
-  const publicKey = String(config.public.webPushPublicKey || '').trim()
-  const privateKey = String(config.webPush.privateKey || '').trim()
-  const subject = String(config.webPush.subject || '').trim()
+  let databaseSettings:
+    | {
+        webPushEnabled: boolean
+        webPushPublicKey: string | null
+        webPushPrivateKey: string | null
+        webPushSubject: string | null
+        webPushCronSecret: string | null
+        webPushReminderMinutes: number
+      }
+    | undefined
 
-  if (!publicKey || !privateKey || !/^(mailto:|https:\/\/)/.test(subject)) return false
+  try {
+    databaseSettings = await db
+      .select({
+        webPushEnabled: systemSettings.webPushEnabled,
+        webPushPublicKey: systemSettings.webPushPublicKey,
+        webPushPrivateKey: systemSettings.webPushPrivateKey,
+        webPushSubject: systemSettings.webPushSubject,
+        webPushCronSecret: systemSettings.webPushCronSecret,
+        webPushReminderMinutes: systemSettings.webPushReminderMinutes
+      })
+      .from(systemSettings)
+      .limit(1)
+      .then((rows) => rows[0])
+  } catch (error) {
+    console.warn('[WebPush] 读取后台配置失败，将使用环境变量:', error)
+  }
 
-  const fingerprint = `${publicKey}:${privateKey}:${subject}`
+  const useDatabase = databaseSettings?.webPushEnabled === true
+  const publicKey = String(
+    useDatabase ? databaseSettings.webPushPublicKey || '' : config.public.webPushPublicKey || ''
+  ).trim()
+  const privateKey = String(
+    useDatabase ? databaseSettings.webPushPrivateKey || '' : config.webPush.privateKey || ''
+  ).trim()
+  const subject = String(
+    useDatabase ? databaseSettings.webPushSubject || '' : config.webPush.subject || ''
+  ).trim()
+  const cronSecret = String(
+    useDatabase ? databaseSettings.webPushCronSecret || '' : config.webPush.cronSecret || ''
+  ).trim()
+  const reminderMinutes = Math.min(
+    1440,
+    Math.max(
+      1,
+      Math.round(
+        Number(
+          useDatabase
+            ? databaseSettings.webPushReminderMinutes
+            : config.webPush.reminderMinutes
+        ) || 10
+      )
+    )
+  )
+
+  const value: WebPushConfiguration = {
+    publicKey,
+    privateKey,
+    subject,
+    cronSecret,
+    reminderMinutes,
+    configured: Boolean(
+      publicKey && privateKey && /^(mailto:[^\s@]+@[^\s@]+|https:\/\/\S+)$/.test(subject)
+    ),
+    source: useDatabase ? 'database' : 'environment'
+  }
+
+  configurationCache = { value, expiresAt: Date.now() + 30_000 }
+  return value
+}
+
+async function configureWebPush() {
+  const configuration = await getWebPushConfiguration()
+
+  if (!configuration.configured) return false
+
+  const fingerprint = `${configuration.publicKey}:${configuration.privateKey}:${configuration.subject}`
   if (configuredFingerprint !== fingerprint) {
     try {
-      webpush.setVapidDetails(subject, publicKey, privateKey)
+      webpush.setVapidDetails(
+        configuration.subject,
+        configuration.publicKey,
+        configuration.privateKey
+      )
       configuredFingerprint = fingerprint
     } catch (error) {
       console.error('[WebPush] VAPID 配置无效:', error)
@@ -42,8 +136,8 @@ function configureWebPush() {
   return true
 }
 
-export function isWebPushConfigured() {
-  return configureWebPush()
+export async function isWebPushConfigured() {
+  return await configureWebPush()
 }
 
 export async function sendWebPushToUser(
@@ -51,7 +145,7 @@ export async function sendWebPushToUser(
   payload: WebPushPayload
 ): Promise<WebPushResult> {
   const result: WebPushResult = { sent: 0, failed: 0, removed: 0, configured: false }
-  if (!configureWebPush()) return result
+  if (!(await configureWebPush())) return result
   result.configured = true
 
   const settings = await db

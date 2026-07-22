@@ -15,7 +15,7 @@ const subscriptionSchema = z.object({
 export default defineEventHandler(async (event) => {
   const user = event.context.user
   if (!user) throw createError({ statusCode: 401, message: '需要登录才能开启浏览器通知' })
-  if (!isWebPushConfigured()) {
+  if (!(await isWebPushConfigured())) {
     throw createError({ statusCode: 503, message: '管理员尚未完整配置 Web Push' })
   }
 

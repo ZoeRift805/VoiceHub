@@ -192,6 +192,13 @@ export const systemSettings = pgTable('SystemSettings', {
   smtpPassword: text('smtpPassword'),
   smtpFromEmail: text('smtpFromEmail'),
   smtpFromName: text('smtpFromName').default('校园广播站'),
+  // Web Push 配置
+  webPushEnabled: boolean('webPushEnabled').default(false).notNull(),
+  webPushPublicKey: text('webPushPublicKey'),
+  webPushPrivateKey: text('webPushPrivateKey'),
+  webPushSubject: text('webPushSubject'),
+  webPushCronSecret: text('webPushCronSecret'),
+  webPushReminderMinutes: integer('webPushReminderMinutes').default(10).notNull(),
   enableRequestTimeLimitation: boolean('enableRequestTimeLimitation').default(false).notNull(),
   forceBlockAllRequests: boolean().default(false).notNull(),
   enableReplayRequests: boolean('enableReplayRequests').default(false).notNull(),
