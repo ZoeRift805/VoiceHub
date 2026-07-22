@@ -17,6 +17,51 @@ const subscriptionUsesKey = (subscription, publicKey) => {
   return uint8ArrayToUrlBase64(new Uint8Array(applicationServerKey)) === publicKey
 }
 
+const isIosDevice = () =>
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
+const isStandalonePwa = () =>
+  window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+
+const getPlatformUnavailableMessage = () => {
+  if (!window.isSecureContext) return '浏览器推送要求使用 HTTPS 安全连接'
+  if (isIosDevice() && !isStandalonePwa()) {
+    return 'iPhone/iPad 需先将 VoiceHub 添加到主屏幕，再从主屏幕图标打开并启用推送'
+  }
+  return ''
+}
+
+const getWebPushErrorMessage = (err, fallback) => {
+  if (err?.data?.message) return err.data.message
+
+  const name = String(err?.name || '')
+  const message = String(err?.message || '')
+  const details = `${name} ${message}`.toLowerCase()
+
+  if (details.includes('push service') || details.includes('registration failed')) {
+    return '无法连接手机的系统推送服务。Android Chromium 需要可用的 Google Play/FCM 推送通道，请检查系统服务和网络后重试'
+  }
+  if (name === 'NotAllowedError' || details.includes('permission')) {
+    return '浏览器通知权限未获得授权，请在系统或浏览器的网站设置中允许通知'
+  }
+  if (
+    name === 'InvalidAccessError' ||
+    details.includes('applicationserverkey') ||
+    details.includes('vapid')
+  ) {
+    return '站点 Web Push 公钥无效或已经变更，请联系管理员重新生成并保存密钥'
+  }
+  if (name === 'InvalidStateError' || details.includes('service worker')) {
+    return '推送服务尚未就绪，请完全关闭并重新打开 VoiceHub 后重试'
+  }
+  if (name === 'AbortError' || details.includes('network') || details.includes('fetch')) {
+    return '推送注册网络请求失败，请检查网络连接后重试'
+  }
+
+  return message || fallback
+}
+
 export const useWebPush = () => {
   const supported = useState('web-push-supported', () => false)
   const enabled = useState('web-push-enabled', () => false)
@@ -41,13 +86,17 @@ export const useWebPush = () => {
   const initialize = async () => {
     if (!import.meta.client) return
 
-    supported.value =
+    error.value = ''
+    const browserSupported =
       'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+    const platformUnavailableMessage = browserSupported ? getPlatformUnavailableMessage() : ''
+    supported.value = browserSupported && !platformUnavailableMessage
     permission.value = supported.value ? Notification.permission : 'unsupported'
     configured.value = false
     publicKey.value = ''
     enabled.value = false
 
+    if (platformUnavailableMessage) error.value = platformUnavailableMessage
     if (!supported.value) return
 
     try {
@@ -84,7 +133,8 @@ export const useWebPush = () => {
         enabled.value = true
       }
     } catch (err) {
-      error.value = err?.data?.message || err?.message || '读取浏览器通知状态失败'
+      console.error('[WebPush] 读取浏览器通知状态失败:', err)
+      error.value = getWebPushErrorMessage(err, '读取浏览器通知状态失败')
     }
   }
 
@@ -94,6 +144,9 @@ export const useWebPush = () => {
     loading.value = true
     error.value = ''
     try {
+      const platformUnavailableMessage = getPlatformUnavailableMessage()
+      if (platformUnavailableMessage) throw new Error(platformUnavailableMessage)
+
       permission.value = await Notification.requestPermission()
       if (permission.value !== 'granted') {
         throw new Error('浏览器通知权限未获得授权')
@@ -112,7 +165,8 @@ export const useWebPush = () => {
       enabled.value = true
       return true
     } catch (err) {
-      error.value = err?.data?.message || err?.message || '开启浏览器通知失败'
+      console.error('[WebPush] 开启浏览器通知失败:', err)
+      error.value = getWebPushErrorMessage(err, '开启浏览器通知失败')
       return false
     } finally {
       loading.value = false
@@ -135,7 +189,8 @@ export const useWebPush = () => {
       enabled.value = false
       return true
     } catch (err) {
-      error.value = err?.data?.message || err?.message || '关闭浏览器通知失败'
+      console.error('[WebPush] 关闭浏览器通知失败:', err)
+      error.value = getWebPushErrorMessage(err, '关闭浏览器通知失败')
       return false
     } finally {
       loading.value = false
@@ -149,7 +204,8 @@ export const useWebPush = () => {
       await $fetch('/api/notifications/push-subscriptions/test', { method: 'POST' })
       return true
     } catch (err) {
-      error.value = err?.data?.message || err?.message || '测试通知发送失败'
+      console.error('[WebPush] 测试通知发送失败:', err)
+      error.value = getWebPushErrorMessage(err, '测试通知发送失败')
       return false
     } finally {
       loading.value = false
