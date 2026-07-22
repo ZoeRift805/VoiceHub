@@ -9,6 +9,8 @@ export interface WebPushPayload {
   path?: string
   tag?: string
   type?: string
+  ttl?: number
+  urgency?: 'very-low' | 'low' | 'normal' | 'high'
 }
 
 export interface WebPushResult {
@@ -89,9 +91,7 @@ export async function getWebPushConfiguration(): Promise<WebPushConfiguration> {
       1,
       Math.round(
         Number(
-          useDatabase
-            ? databaseSettings.webPushReminderMinutes
-            : config.webPush.reminderMinutes
+          useDatabase ? databaseSettings.webPushReminderMinutes : config.webPush.reminderMinutes
         ) || 10
       )
     )
@@ -142,7 +142,8 @@ export async function isWebPushConfigured() {
 
 export async function sendWebPushToUser(
   userId: number,
-  payload: WebPushPayload
+  payload: WebPushPayload,
+  options: { endpoint?: string } = {}
 ): Promise<WebPushResult> {
   const result: WebPushResult = { sent: 0, failed: 0, removed: 0, configured: false }
   if (!(await configureWebPush())) return result
@@ -160,7 +161,14 @@ export async function sendWebPushToUser(
   const subscriptions = await db
     .select()
     .from(pushSubscriptions)
-    .where(eq(pushSubscriptions.userId, userId))
+    .where(
+      options.endpoint
+        ? and(
+            eq(pushSubscriptions.userId, userId),
+            eq(pushSubscriptions.endpoint, options.endpoint)
+          )
+        : eq(pushSubscriptions.userId, userId)
+    )
 
   await Promise.all(
     subscriptions.map(async (subscription) => {
@@ -180,7 +188,7 @@ export async function sendWebPushToUser(
             tag: payload.tag,
             type: payload.type
           }),
-          { TTL: 60 * 60 * 12, urgency: 'normal' }
+          { TTL: payload.ttl ?? 60 * 60 * 12, urgency: payload.urgency ?? 'normal' }
         )
 
         result.sent += 1
@@ -208,7 +216,10 @@ export async function sendWebPushToUser(
             updatedAt: new Date()
           })
           .where(eq(pushSubscriptions.id, subscription.id))
-        console.error(`[WebPush] 推送失败 (User: ${userId}, Status: ${statusCode || 'unknown'})`)
+        console.error(`[WebPush] 推送失败 (User: ${userId}, Status: ${statusCode || 'unknown'}):`, {
+          message: error?.message,
+          body: error?.body
+        })
       }
     })
   )

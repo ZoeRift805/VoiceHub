@@ -201,8 +201,15 @@ export const useWebPush = () => {
     loading.value = true
     error.value = ''
     try {
-      await $fetch('/api/notifications/push-subscriptions/test', { method: 'POST' })
-      return true
+      const registration = await getRegistration()
+      const subscription = await registration?.pushManager.getSubscription()
+      if (!subscription) throw new Error('当前设备尚未注册推送，请关闭推送后重新开启')
+
+      const response = await $fetch('/api/notifications/push-subscriptions/test', {
+        method: 'POST',
+        body: { endpoint: subscription.endpoint }
+      })
+      return response?.data || true
     } catch (err) {
       console.error('[WebPush] 测试通知发送失败:', err)
       error.value = getWebPushErrorMessage(err, '测试通知发送失败')

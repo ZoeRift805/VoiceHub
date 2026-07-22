@@ -12,6 +12,9 @@ self.addEventListener('push', (event) => {
       icon: '/images/logo-144.png',
       badge: '/images/logo-144.png',
       tag: data.tag || undefined,
+      renotify: Boolean(data.tag),
+      silent: false,
+      timestamp: Date.now(),
       data: { path: data.path || '/?tab=notification' }
     })
   )

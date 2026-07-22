@@ -15,11 +15,12 @@
         <button
           v-if="enabled"
           :disabled="loading"
-          class="p-2.5 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
+          class="inline-flex items-center justify-center gap-2 px-3 py-2.5 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
           title="发送测试通知"
           @click="handleTest"
         >
           <Icon name="bell" size="16" />
+          <span class="text-xs font-bold">发送测试</span>
         </button>
         <button
           :disabled="loading || !supported || !configured || permission === 'denied'"
@@ -77,7 +78,7 @@ const handleToggle = async () => {
 }
 
 const handleTest = async () => {
-  if (await sendTest()) showToast('测试通知已发送', 'success')
+  if (await sendTest()) showToast('推送服务已接收，请查看系统通知栏', 'success')
 }
 
 onMounted(initialize)
