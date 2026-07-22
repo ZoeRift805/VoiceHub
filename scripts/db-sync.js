@@ -181,12 +181,19 @@ async function checkSchemaConsistency(sql) {
     'api_key_permissions',
     'api_logs',
     'CardCode',
-    'CardCodeRedeemLog'
+    'CardCodeRedeemLog',
+    'PushSubscription'
   ]
   const requiredColumns = {
     User: ['status', 'statusChangedAt', 'statusChangedBy', 'email', 'emailVerified'],
     Song: ['playUrl', 'submissionNote', 'submissionNotePublic', 'hitRequestId', 'cardCodeId'],
-    Schedule: ['isDraft', 'publishedAt'],
+    Schedule: ['isDraft', 'publishedAt', 'reminderSentAt'],
+    NotificationSettings: [
+      'songRejectedEnabled',
+      'collaborationEnabled',
+      'broadcastReminderEnabled',
+      'webPushEnabled'
+    ],
     SystemSettings: [
       'instance_id',
       'telemetryEnabled',
@@ -198,6 +205,12 @@ async function checkSchemaConsistency(sql) {
       'smtpPassword',
       'smtpFromEmail',
       'smtpFromName',
+      'webPushEnabled',
+      'webPushPublicKey',
+      'webPushPrivateKey',
+      'webPushSubject',
+      'webPushCronSecret',
+      'webPushReminderMinutes',
       'enableRequestTimeLimitation',
       'forceBlockAllRequests',
       'enableReplayRequests',
