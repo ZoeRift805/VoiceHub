@@ -10,7 +10,11 @@ import {
   normalizeAggregateOAuthLoginTypes
 } from '~~/server/utils/oauth-providers'
 
-const normalizeOptionalText = (value: unknown, fieldName: string, maxLength: number) => {
+const normalizeOptionalWebPushText = (
+  value: unknown,
+  fieldName: string,
+  maxLength: number
+) => {
   if (value === null || value === '') return null
   if (typeof value !== 'string') {
     throw createError({ statusCode: 400, message: `${fieldName} 必须是字符串` })
@@ -437,7 +441,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (body.webPushPublicKey !== undefined) {
-      updateData.webPushPublicKey = normalizeOptionalText(
+      updateData.webPushPublicKey = normalizeOptionalWebPushText(
         body.webPushPublicKey,
         'VAPID 公钥',
         512
@@ -448,7 +452,7 @@ export default defineEventHandler(async (event) => {
       body.webPushPrivateKey !== undefined &&
       body.webPushPrivateKey !== SECRET_FIELD_MASK
     ) {
-      updateData.webPushPrivateKey = normalizeOptionalText(
+      updateData.webPushPrivateKey = normalizeOptionalWebPushText(
         body.webPushPrivateKey,
         'VAPID 私钥',
         512
@@ -456,7 +460,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (body.webPushSubject !== undefined) {
-      updateData.webPushSubject = normalizeOptionalText(
+      updateData.webPushSubject = normalizeOptionalWebPushText(
         body.webPushSubject,
         'Web Push 联系地址',
         512
@@ -464,7 +468,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (body.webPushCronSecret !== undefined && body.webPushCronSecret !== SECRET_FIELD_MASK) {
-      updateData.webPushCronSecret = normalizeOptionalText(
+      updateData.webPushCronSecret = normalizeOptionalWebPushText(
         body.webPushCronSecret,
         '定时任务密钥',
         512
@@ -716,7 +720,8 @@ export default defineEventHandler(async (event) => {
     }
 
     // 聚合登陆
-    const normalizeOptionalText = (value: any) => (typeof value === 'string' ? value.trim() : value)
+    const normalizeAggregateOAuthText = (value: any) =>
+      typeof value === 'string' ? value.trim() : value
     const storedAggregateLoginTypes = getAggregateOAuthLoginTypesOrDefault(
       settings?.aggregateOAuthLoginType
     )
@@ -726,15 +731,15 @@ export default defineEventHandler(async (event) => {
         : storedAggregateLoginTypes
     const nextAggregateAppId =
       body.aggregateOAuthAppId !== undefined
-        ? normalizeOptionalText(body.aggregateOAuthAppId)
+        ? normalizeAggregateOAuthText(body.aggregateOAuthAppId)
         : settings?.aggregateOAuthAppId
     const nextAggregateAppKey =
       body.aggregateOAuthAppKey !== undefined && body.aggregateOAuthAppKey !== SECRET_FIELD_MASK
-        ? normalizeOptionalText(body.aggregateOAuthAppKey)
+        ? normalizeAggregateOAuthText(body.aggregateOAuthAppKey)
         : settings?.aggregateOAuthAppKey
     const nextAggregateEndpoint =
       body.aggregateOAuthEndpoint !== undefined
-        ? normalizeOptionalText(body.aggregateOAuthEndpoint)
+        ? normalizeAggregateOAuthText(body.aggregateOAuthEndpoint)
         : settings?.aggregateOAuthEndpoint || 'https://a.idcfx.net/connect.php'
 
     if (body.aggregateOAuthEnabled !== undefined) {
