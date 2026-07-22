@@ -814,6 +814,17 @@ const webPushStatusText = computed(() => {
   return '未启用'
 })
 
+const normalizeErrorMessage = (value, fallback) => {
+  const message = typeof value === 'string' ? value.trim() : ''
+  if (!message) return fallback
+
+  const midpoint = message.length / 2
+  if (Number.isInteger(midpoint) && message.slice(0, midpoint) === message.slice(midpoint)) {
+    return message.slice(0, midpoint)
+  }
+  return message
+}
+
 // 加载配置
 const loadConfig = async () => {
   try {
@@ -948,7 +959,7 @@ const saveConfig = async () => {
           return null
         }
 
-        message = getErrorMessage(errorData) || '保存配置失败'
+        message = normalizeErrorMessage(getErrorMessage(errorData), '保存配置失败')
       } catch (parseError) {
         console.error('无法解析API错误响应:', parseError)
       }
@@ -976,7 +987,7 @@ const saveConfig = async () => {
     console.error('保存配置失败:', error)
     let message = '保存配置失败，请重试'
     if (error?.message) {
-      message = error.message
+      message = normalizeErrorMessage(error.message, message)
     }
     showNotification(message, 'error')
   } finally {

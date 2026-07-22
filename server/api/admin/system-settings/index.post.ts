@@ -60,6 +60,12 @@ const isValidWebPushSubject = (value: string) => {
   }
 }
 
+const isWebPushMigrationMissing = (error: any) => {
+  const code = error?.code || error?.cause?.code
+  const message = String(error?.message || error?.cause?.message || '')
+  return code === '42703' && /webPush/i.test(message)
+}
+
 export default defineEventHandler(async (event) => {
   // 检查用户认证和权限
   const user = event.context.user
@@ -948,6 +954,13 @@ export default defineEventHandler(async (event) => {
 
     if (error.statusCode) {
       throw error
+    }
+
+    if (isWebPushMigrationMissing(error)) {
+      throw createError({
+        statusCode: 503,
+        message: '数据库尚未应用 Web Push 配置迁移，请先执行 pnpm run db:migrate'
+      })
     }
 
     throw createError({
