@@ -14,6 +14,28 @@ import { and, eq, gte, inArray } from 'drizzle-orm'
 import { sendBatchMeowNotifications, sendMeowNotificationToUser } from './meowNotificationService'
 import { sendBatchEmailNotifications, sendEmailNotificationToUser } from './smtpService'
 import { formatDateTime, getBeijingTime } from '~/utils/timeUtils'
+import { sendWebPushToUser, sendWebPushToUsers } from './webPushService'
+
+async function sendBrowserNotification(
+  userId: number,
+  title: string,
+  body: string,
+  type: string,
+  tag: string
+) {
+  try {
+    return await sendWebPushToUser(userId, {
+      title,
+      body,
+      type,
+      tag,
+      path: '/?tab=notification'
+    })
+  } catch (error) {
+    console.error(`发送浏览器通知失败 (User: ${userId}, Type: ${type}):`, error)
+    return null
+  }
+}
 
 /**
  * 创建联合投稿邀请通知
@@ -32,6 +54,14 @@ export async function createCollaborationInvitationNotification(
       .limit(1)
       .then((res) => res[0])
     const message = `用户 ${inviter?.name || '未知用户'} 邀请您共同投稿歌曲《${songTitle}》。`
+
+    const settings = await db
+      .select()
+      .from(notificationSettings)
+      .where(eq(notificationSettings.userId, inviteeId))
+      .limit(1)
+      .then((rows) => rows[0])
+    if (settings && (!settings.enabled || !settings.collaborationEnabled)) return null
 
     // 创建通知
     const notificationResult = await db
@@ -68,6 +98,14 @@ export async function createCollaborationInvitationNotification(
       console.error('发送邮件通知失败:', error)
     }
 
+    await sendBrowserNotification(
+      inviteeId,
+      '收到联合投稿邀请',
+      message,
+      'COLLABORATION_INVITE',
+      `collaboration-invite-${songId}`
+    )
+
     return notificationResult[0]
   } catch (error) {
     console.error('创建联合投稿邀请通知失败:', error)
@@ -94,6 +132,14 @@ export async function createCollaborationResponseNotification(
     const actionText = accepted ? '接受' : '拒绝'
     const message = `用户 ${invitee?.name || '未知用户'} ${actionText}了您的歌曲《${songTitle}》的联合投稿邀请。`
 
+    const settings = await db
+      .select()
+      .from(notificationSettings)
+      .where(eq(notificationSettings.userId, inviterId))
+      .limit(1)
+      .then((rows) => rows[0])
+    if (settings && (!settings.enabled || !settings.collaborationEnabled)) return null
+
     // 创建通知
     const notificationResult = await db
       .insert(notifications)
@@ -104,6 +150,14 @@ export async function createCollaborationResponseNotification(
         // songId // 这里可能不需要songId，或者需要传进来
       })
       .returning()
+
+    await sendBrowserNotification(
+      inviterId,
+      '联合投稿邀请已处理',
+      message,
+      'COLLABORATION_RESPONSE',
+      `collaboration-response-${inviterId}-${songTitle}`
+    )
 
     return notificationResult[0]
   } catch (error) {
@@ -159,7 +213,7 @@ export async function createSongSelectedNotification(
     const settings = settingsResult[0]
 
     // 如果用户关闭了此类通知，则不发送
-    if (settings && !settings.enabled) {
+    if (settings && (!settings.enabled || !settings.songRequestEnabled)) {
       return null
     }
 
@@ -229,6 +283,14 @@ export async function createSongSelectedNotification(
       console.error('发送邮件通知失败:', error)
     }
 
+    await sendBrowserNotification(
+      userId,
+      '歌曲已安排播出',
+      message,
+      'SONG_SELECTED',
+      `song-selected-${songId}`
+    )
+
     return notification
   } catch (err) {
     return null
@@ -262,7 +324,7 @@ export async function createSongPlayedNotification(songId: number) {
     const settings = settingsResult[0]
 
     // 如果用户关闭了此类通知，则不发送
-    if (settings && !settings.songPlayedEnabled) {
+    if (settings && (!settings.enabled || !settings.songPlayedEnabled)) {
       return null
     }
 
@@ -297,7 +359,7 @@ export async function createSongPlayedNotification(songId: number) {
         const settings = settingsResult[0]
 
         // 如果用户关闭了此类通知，则不发送
-        if (settings && !settings.songPlayedEnabled) {
+        if (settings && (!settings.enabled || !settings.songPlayedEnabled)) {
           continue
         }
 
@@ -339,6 +401,14 @@ export async function createSongPlayedNotification(songId: number) {
         } catch (error) {
           console.error(`发送邮件通知失败 (User: ${targetUserId}):`, error)
         }
+
+        await sendBrowserNotification(
+          targetUserId,
+          '歌曲已播放',
+          userMessage,
+          'SONG_PLAYED',
+          `song-played-${songId}`
+        )
       } catch (err) {
         console.error(`处理播放通知失败 (User: ${targetUserId}):`, err)
       }
@@ -386,7 +456,7 @@ export async function createSongVotedNotification(
     const settings = settingsResult[0]
 
     // 如果用户关闭了此类通知，则不发送
-    if (settings && !settings.songVotedEnabled) {
+    if (settings && (!settings.enabled || !settings.songVotedEnabled)) {
       return null
     }
 
@@ -471,6 +541,14 @@ export async function createSongVotedNotification(
       console.error('发送邮件通知失败:', error)
     }
 
+    await sendBrowserNotification(
+      song.requesterId,
+      '收到新投票',
+      message,
+      'SONG_VOTED',
+      `song-voted-${songId}`
+    )
+
     return notification
   } catch (err) {
     return null
@@ -495,7 +573,7 @@ export async function createSongRejectedNotification(
     const settings = settingsResult[0]
 
     // 如果用户关闭了通知，则不发送
-    if (settings && !settings.enabled) {
+    if (settings && (!settings.enabled || !settings.songRejectedEnabled)) {
       return null
     }
 
@@ -541,6 +619,14 @@ export async function createSongRejectedNotification(
     } catch (error) {
       console.error('发送邮件通知失败:', error)
     }
+
+    await sendBrowserNotification(
+      userId,
+      '歌曲被驳回',
+      message,
+      'SONG_REJECTED',
+      `song-rejected-${userId}-${songInfo.title}`
+    )
 
     return notification
   } catch (err) {
@@ -624,6 +710,14 @@ export async function createSystemNotification(
       console.error('发送邮件通知失败:', error)
     }
 
+    await sendBrowserNotification(
+      userId,
+      title,
+      content,
+      'SYSTEM_NOTICE',
+      `system-notice-${notification.id}`
+    )
+
     return notification
   } catch (err) {
     return null
@@ -705,11 +799,28 @@ export async function createBatchSystemNotifications(
       console.error('批量发送邮件通知失败:', error)
     }
 
+    let webPushResults = { sent: 0, failed: 0, removed: 0 }
+    try {
+      webPushResults = await sendWebPushToUsers(
+        notificationsToCreate.map((item) => item.userId),
+        {
+          title,
+          body: content,
+          type: 'SYSTEM_NOTICE',
+          tag: `system-notice-${createdNotifications[0]?.id || Date.now()}`,
+          path: '/?tab=notification'
+        }
+      )
+    } catch (error) {
+      console.error('批量发送浏览器通知失败:', error)
+    }
+
     return {
       count: notificationCount.count,
       total: userIds.length,
       meowNotifications: meowResults,
-      emailNotifications: emailResults
+      emailNotifications: emailResults,
+      webPushNotifications: webPushResults
     }
   } catch (err) {
     return null
@@ -733,7 +844,7 @@ export async function createReplayRequestRejectedNotification(
     const settings = settingsResult[0]
 
     // 如果用户关闭了通知，则不发送
-    if (settings && !settings.enabled) {
+    if (settings && (!settings.enabled || !settings.songRejectedEnabled)) {
       return null
     }
 
@@ -770,9 +881,50 @@ export async function createReplayRequestRejectedNotification(
       console.error('发送邮件通知失败:', error)
     }
 
+    await sendBrowserNotification(
+      userId,
+      '重播申请已拒绝',
+      message,
+      'REPLAY_REJECTED',
+      `replay-rejected-${userId}-${songInfo.title}`
+    )
+
     return notification
   } catch (err) {
     console.error('创建重播申请拒绝通知失败:', err)
     return null
   }
+}
+
+export async function createBroadcastReminderNotification(
+  userId: number,
+  songId: number,
+  songTitle: string,
+  minutes: number
+) {
+  const settings = await db
+    .select()
+    .from(notificationSettings)
+    .where(eq(notificationSettings.userId, userId))
+    .limit(1)
+    .then((rows) => rows[0])
+
+  if (settings && (!settings.enabled || !settings.broadcastReminderEnabled)) return null
+
+  const message = `您投稿的歌曲《${songTitle}》预计将在 ${minutes} 分钟内播出。`
+  const notification = await db
+    .insert(notifications)
+    .values({ userId, songId, type: 'BROADCAST_REMINDER', message })
+    .returning()
+    .then((rows) => rows[0])
+
+  await sendBrowserNotification(
+    userId,
+    '歌曲即将播出',
+    message,
+    'BROADCAST_REMINDER',
+    `broadcast-reminder-${songId}`
+  )
+
+  return notification
 }

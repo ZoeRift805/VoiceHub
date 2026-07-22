@@ -159,6 +159,21 @@ export const useAuth = () => {
   }
 
   const logout = async (redirect = true) => {
+    if (import.meta.client && 'serviceWorker' in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.ready
+        const subscription = await registration.pushManager?.getSubscription()
+        if (subscription) {
+          await $fetch('/api/notifications/push-subscriptions', {
+            method: 'DELETE',
+            body: { endpoint: subscription.endpoint }
+          })
+        }
+      } catch {
+        // 推送订阅清理失败不应阻止用户退出登录
+      }
+    }
+
     try {
       await $fetch('/api/auth/logout', { method: 'POST' })
     } catch (error) {

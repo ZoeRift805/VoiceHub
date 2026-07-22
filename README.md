@@ -676,6 +676,13 @@ VoiceHub 实现了细粒度的权限控制系统：
 | NITRO_PRESET           | 否   | Nitro预设                                               | `vercel`                                                                                                                                        |
 | NUXT_PUBLIC_HOST       | 否   | 用于 CORS 和反向代理的主机名验证                        | `your-app.com`                                                                                                                                  |
 | NUXT_PUBLIC_SEO_CONFIG | 否   | 用于自定义 PWA/SEO 配置的 JSON 字符串                   | `{"title":"VoiceHub校园广播站点歌系统","shortName":"校园广播","description":"校园广播站点歌系统 - 让你的声音被听见","logo":"/images/logo.png"}` |
+| NUXT_PUBLIC_WEB_PUSH_PUBLIC_KEY | 否 | Web Push VAPID 公钥                                | `B...`                                                                                                                                          |
+| WEB_PUSH_PRIVATE_KEY   | 否   | Web Push VAPID 私钥，仅服务端使用                       | `...`                                                                                                                                           |
+| WEB_PUSH_SUBJECT       | 否   | Web Push 联系地址，必须为 `mailto:` 或 HTTPS URL        | `mailto:admin@example.com`                                                                                                                       |
+| WEB_PUSH_CRON_SECRET   | 否   | 播出前提醒内部定时任务密钥                              | `strong-random-secret`                                                                                                                           |
+| WEB_PUSH_REMINDER_MINUTES | 否 | 提前多少分钟发送播出提醒                                | `10`                                                                                                                                             |
+
+Web Push 密钥可通过 `pnpm exec web-push generate-vapid-keys` 生成。播出前提醒需由定时任务每分钟请求 `POST /api/internal/notifications/broadcast-reminders`，并携带 `Authorization: Bearer <WEB_PUSH_CRON_SECRET>`。
 
 Redis 不参与歌曲、排期、点赞或用户资料缓存。迁移旧部署时可先执行 dry-run：
 
@@ -808,7 +815,8 @@ VoiceHub/
 │   │   ├── Common/            # 通用组件
 │   │   │   └── UserSearchModal.vue   # 用户搜索弹窗
 │   │   ├── Notifications/     # 通知系统组件
-│   │   │   └── NotificationSettings.vue # 通知设置
+│   │   │   ├── NotificationSettings.vue # 通知设置
+│   │   │   └── WebPushManager.vue # 浏览器推送设备管理
 │   │   ├── Player/            # 播放器相关组件
 │   │   │   └── PlayerLyric/   # 播放器歌词子组件
 │   │   │       ├── AMLyric.vue        # Apple Music风格歌词
@@ -878,6 +886,7 @@ VoiceHub/
 │   │   ├── useMusicSources.ts    # 音乐源管理hooks
 │   │   ├── useMusicWebSocket.ts  # 音乐WebSocket hooks
 │   │   ├── useNotifications.ts # 通知功能hooks
+│   │   ├── useWebPush.js      # 浏览器推送订阅hooks
 │   │   ├── usePermissions.ts   # 权限管理hooks
 │   │   ├── usePasswordStrength.ts # 密码强度检测hooks
 │   │   ├── useProgress.ts      # 进度管理hooks
@@ -917,14 +926,6 @@ VoiceHub/
 │   │   ├── auth.client.ts      # 客户端认证插件
 │   │   ├── auth.server.ts      # 服务端认证插件
 │   │   └── time-sync.client.ts # 客户端时间同步插件
-│   ├── public/                # 静态文件目录
-│   │   ├── images/            # 图片资源
-│   │   │   ├── logo.png       # PNG格式Logo
-│   │   │   ├── logo.svg       # SVG格式Logo
-│   │   │   ├── search.svg     # 搜索图标
-│   │   │   └── thumbs-up.svg  # 点赞图标
-│   │   ├── favicon.ico        # 网站图标
-│   │   └── robots.txt         # 搜索引擎爬虫配置
 │   └── utils/                 # 工具函数
 │       ├── core/              # 核心工具
 │       │   └── security.ts    # 安全相关工具
@@ -949,6 +950,11 @@ VoiceHub/
 │       ├── timeUtils.ts       # 时间工具
 │       ├── webauthn.js        # WebAuthn浏览器兼容工具
 │       └── url.ts             # URL处理工具
+├── public/                    # 静态文件目录
+│   ├── images/                # 图片资源
+│   ├── favicon.ico            # 网站图标
+│   ├── push-sw.js             # Web Push Service Worker 事件处理
+│   └── robots.txt             # 搜索引擎爬虫配置
 ├── server/                # 服务端代码
 │   ├── api/                # API路由
 │   │   ├── admin/          # 管理员API
@@ -1131,8 +1137,11 @@ VoiceHub/
 │   │   │   │   ├── send-verification.post.ts # 发送验证码
 │   │   │   │   └── test.post.ts     # 测试通知
 │   │   │   ├── read-all.post.ts     # 标记所有已读
+│   │   │   ├── push-subscriptions/  # 浏览器推送订阅管理
 │   │   │   ├── settings.post.ts     # 更新通知设置
 │   │   │   └── settings.ts          # 获取通知设置
+│   │   ├── internal/       # 内部任务API
+│   │   │   └── notifications/broadcast-reminders.post.ts # 播出前提醒任务
 │   │   ├── open/           # 开放API（无需认证）
 │   │   │   ├── card-codes/          # 点歌券开放API
 │   │   │   │   └── delete.post.ts   # 删除点歌券（兼容不支持 DELETE body 的代理）
@@ -1232,6 +1241,7 @@ VoiceHub/
 │   │   ├── securityService.ts # 安全服务
 │   │   ├── songRequestService.ts # 点歌投稿服务
 │   │   ├── smtpService.ts  # SMTP邮件服务
+│   │   ├── webPushService.ts # Web Push投递服务
 │   │   └── userService.ts # 用户服务
 │   ├── utils/              # 服务端工具函数
 │   │   ├── apiKeyUtils.ts  # API Key生成、哈希与校验

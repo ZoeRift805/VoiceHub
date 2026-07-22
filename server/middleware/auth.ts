@@ -41,6 +41,7 @@ export default defineEventHandler(async (event) => {
     '/api/native-api/', // Native Music 集成API
     '/api/system/location', // 系统位置检测API
     '/api/open/', // 开放API路径，由api-auth中间件处理认证
+    '/api/internal/notifications/broadcast-reminders', // 播出提醒任务由独立密钥认证
     '/api/auth/webauthn/login', // WebAuthn 登录接口
     '/api/music/resolve-url', // 音乐播放链接解析
     '/api/music/state', // 音乐状态同步
@@ -140,7 +141,7 @@ export default defineEventHandler(async (event) => {
         maxAge: 0,
         path: '/'
       })
-      
+
       const errorMessage = !user 
         ? '用户不存在，请重新登录' 
         : user.status === 'withdrawn' 

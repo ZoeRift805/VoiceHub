@@ -139,8 +139,8 @@ export const useNotifications = () => {
         ...authConfig
       })
 
-      if (data) {
-        settings.value = data
+      if (data?.data) {
+        settings.value = data.data
       }
     } catch (err: any) {
       const errorHandler = useErrorHandler()
@@ -172,9 +172,9 @@ export const useNotifications = () => {
         ...authConfig
       })
 
-      if (data) {
-        settings.value = data
-        return data
+      if (data?.data) {
+        settings.value = data.data
+        return data.data
       }
       return null
     } catch (err: any) {

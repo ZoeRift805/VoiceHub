@@ -85,6 +85,7 @@ export default defineEventHandler(async (event) => {
         .update(schedules)
         .set({
           playDate: toPlayDate,
+          reminderSentAt: null,
           updatedAt: updateTime
         })
         .where(inArray(schedules.id, scheduleIds))

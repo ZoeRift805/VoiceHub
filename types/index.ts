@@ -72,7 +72,16 @@ export interface Schedule {
   }
 }
 
-export type NotificationType = 'SONG_SELECTED' | 'SONG_PLAYED' | 'SONG_VOTED' | 'SYSTEM_NOTICE'
+export type NotificationType =
+  | 'SONG_SELECTED'
+  | 'SONG_PLAYED'
+  | 'SONG_VOTED'
+  | 'SONG_REJECTED'
+  | 'COLLABORATION_INVITE'
+  | 'COLLABORATION_RESPONSE'
+  | 'BROADCAST_REMINDER'
+  | 'REPLAY_REJECTED'
+  | 'SYSTEM_NOTICE'
 
 export interface Notification {
   id: number
@@ -92,6 +101,10 @@ export interface NotificationSettings {
   songSelectedNotify: boolean
   songPlayedNotify: boolean
   songVotedNotify: boolean
+  songRejectedNotify: boolean
+  collaborationNotify: boolean
+  broadcastReminderNotify: boolean
+  webPushEnabled: boolean
   systemNotify: boolean
   refreshInterval: number
   songVotedThreshold: number
@@ -108,6 +121,10 @@ export interface DBNotificationSettings {
   songRequestEnabled: boolean
   songVotedEnabled: boolean
   songPlayedEnabled: boolean
+  songRejectedEnabled: boolean
+  collaborationEnabled: boolean
+  broadcastReminderEnabled: boolean
+  webPushEnabled: boolean
   refreshInterval: number
   songVotedThreshold: number
 }

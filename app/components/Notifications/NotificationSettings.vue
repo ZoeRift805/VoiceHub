@@ -39,6 +39,45 @@
 
       <div :class="itemClass">
         <div class="flex-1">
+          <h3 class="text-sm font-bold text-zinc-200">歌曲驳回通知</h3>
+          <p class="text-[11px] text-zinc-500 mt-0.5">投稿被驳回时接收原因说明</p>
+        </div>
+        <input
+          v-model="localSettings.songRejectedNotify"
+          type="checkbox"
+          class="w-5 h-5 rounded border-zinc-800 bg-zinc-900 accent-blue-600 cursor-pointer"
+          @change="saveSettings"
+        />
+      </div>
+
+      <div :class="itemClass">
+        <div class="flex-1">
+          <h3 class="text-sm font-bold text-zinc-200">联合投稿通知</h3>
+          <p class="text-[11px] text-zinc-500 mt-0.5">接收联合投稿邀请和处理结果</p>
+        </div>
+        <input
+          v-model="localSettings.collaborationNotify"
+          type="checkbox"
+          class="w-5 h-5 rounded border-zinc-800 bg-zinc-900 accent-blue-600 cursor-pointer"
+          @change="saveSettings"
+        />
+      </div>
+
+      <div :class="itemClass">
+        <div class="flex-1">
+          <h3 class="text-sm font-bold text-zinc-200">播出前提醒</h3>
+          <p class="text-[11px] text-zinc-500 mt-0.5">排期临近播出时接收提醒</p>
+        </div>
+        <input
+          v-model="localSettings.broadcastReminderNotify"
+          type="checkbox"
+          class="w-5 h-5 rounded border-zinc-800 bg-zinc-900 accent-blue-600 cursor-pointer"
+          @change="saveSettings"
+        />
+      </div>
+
+      <div :class="itemClass">
+        <div class="flex-1">
           <h3 class="text-sm font-bold text-zinc-200">歌曲已播放通知</h3>
           <p class="text-[11px] text-zinc-500 mt-0.5">当您投稿的歌曲被播放时通知您</p>
         </div>
@@ -131,6 +170,8 @@
           <span>5m</span>
         </div>
       </div>
+
+      <NotificationsWebPushManager />
     </div>
   </div>
 </template>
@@ -154,6 +195,9 @@ const localSettings = ref({
   songSelectedNotify: true,
   songPlayedNotify: true,
   songVotedNotify: true,
+  songRejectedNotify: true,
+  collaborationNotify: true,
+  broadcastReminderNotify: true,
   songVotedThreshold: 1,
   systemNotify: true,
   refreshInterval: 60
@@ -168,6 +212,9 @@ watch(
         songSelectedNotify: newSettings.songSelectedNotify,
         songPlayedNotify: newSettings.songPlayedNotify,
         songVotedNotify: newSettings.songVotedNotify,
+        songRejectedNotify: newSettings.songRejectedNotify,
+        collaborationNotify: newSettings.collaborationNotify,
+        broadcastReminderNotify: newSettings.broadcastReminderNotify,
         songVotedThreshold: newSettings.songVotedThreshold || 1,
         systemNotify: newSettings.systemNotify,
         refreshInterval: newSettings.refreshInterval || 60

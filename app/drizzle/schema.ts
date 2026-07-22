@@ -99,6 +99,7 @@ export const schedules = pgTable('Schedule', {
   // 草稿支持字段
   isDraft: boolean('isDraft').default(false).notNull(),
   publishedAt: timestamp('publishedAt'),
+  reminderSentAt: timestamp('reminderSentAt'),
 }, (table) => [
   index('schedule_published_song_idx').on(table.isDraft, table.songId, table.playDate),
   index('schedule_published_date_idx').on(table.isDraft, table.playDate)
@@ -126,9 +127,29 @@ export const notificationSettings = pgTable('NotificationSettings', {
   songRequestEnabled: boolean('songRequestEnabled').default(true).notNull(),
   songVotedEnabled: boolean('songVotedEnabled').default(true).notNull(),
   songPlayedEnabled: boolean('songPlayedEnabled').default(true).notNull(),
+  songRejectedEnabled: boolean('songRejectedEnabled').default(true).notNull(),
+  collaborationEnabled: boolean('collaborationEnabled').default(true).notNull(),
+  broadcastReminderEnabled: boolean('broadcastReminderEnabled').default(true).notNull(),
+  webPushEnabled: boolean('webPushEnabled').default(false).notNull(),
   refreshInterval: integer('refreshInterval').default(60).notNull(),
   songVotedThreshold: integer('songVotedThreshold').default(1).notNull(),
 });
+
+// 浏览器推送订阅表，每个用户可绑定多个设备
+export const pushSubscriptions = pgTable('PushSubscription', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: integer('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  userAgent: text('userAgent'),
+  failureCount: integer('failureCount').default(0).notNull(),
+  lastSuccessAt: timestamp('lastSuccessAt'),
+  createdAt: timestamp('createdAt').defaultNow().notNull(),
+  updatedAt: timestamp('updatedAt').defaultNow().notNull(),
+}, (table) => [
+  index('push_subscription_user_id_idx').on(table.userId)
+]);
 
 // 学期表
 export const semesters = pgTable('Semester', {
@@ -368,6 +389,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
     fields: [users.id],
     references: [notificationSettings.userId],
   }),
+  pushSubscriptions: many(pushSubscriptions),
   apiKeys: many(apiKeys),
   statusLogs: many(userStatusLogs),
     collaborations: many(songCollaborators),
@@ -437,6 +459,13 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 export const notificationSettingsRelations = relations(notificationSettings, ({ one }) => ({
   user: one(users, {
     fields: [notificationSettings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [pushSubscriptions.userId],
     references: [users.id],
   }),
 }));
@@ -540,6 +569,8 @@ export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
 export type NotificationSettings = typeof notificationSettings.$inferSelect;
 export type NewNotificationSettings = typeof notificationSettings.$inferInsert;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;
 export type PlayTime = typeof playTimes.$inferSelect;
 export type NewPlayTime = typeof playTimes.$inferInsert;
 export type Semester = typeof semesters.$inferSelect;

@@ -111,6 +111,42 @@
               </div>
             </div>
 
+            <div :class="itemClass">
+              <div class="flex-1">
+                <h3 class="text-sm font-bold text-zinc-200">歌曲驳回消息</h3>
+                <p class="text-[11px] text-zinc-500 mt-1">投稿被驳回时接收原因说明</p>
+              </div>
+              <input
+                v-model="localSettings.songRejectedNotify"
+                type="checkbox"
+                class="w-5 h-5 rounded border-zinc-800 bg-zinc-900 accent-blue-600 cursor-pointer"
+              />
+            </div>
+
+            <div :class="itemClass">
+              <div class="flex-1">
+                <h3 class="text-sm font-bold text-zinc-200">联合投稿消息</h3>
+                <p class="text-[11px] text-zinc-500 mt-1">接收联合投稿邀请和处理结果</p>
+              </div>
+              <input
+                v-model="localSettings.collaborationNotify"
+                type="checkbox"
+                class="w-5 h-5 rounded border-zinc-800 bg-zinc-900 accent-blue-600 cursor-pointer"
+              />
+            </div>
+
+            <div :class="itemClass">
+              <div class="flex-1">
+                <h3 class="text-sm font-bold text-zinc-200">播出前提醒</h3>
+                <p class="text-[11px] text-zinc-500 mt-1">排期临近播出时接收提醒</p>
+              </div>
+              <input
+                v-model="localSettings.broadcastReminderNotify"
+                type="checkbox"
+                class="w-5 h-5 rounded border-zinc-800 bg-zinc-900 accent-blue-600 cursor-pointer"
+              />
+            </div>
+
             <!-- 投票阈值设置 -->
             <div :class="[itemClass, 'md:col-span-1']">
               <div class="flex-1">
@@ -150,6 +186,19 @@
               </div>
             </div>
           </div>
+        </section>
+
+        <section :class="sectionClass">
+          <div class="flex items-center gap-3 border-b border-zinc-800/50 pb-5 mb-6">
+            <div class="p-2.5 bg-blue-500/10 rounded-xl">
+              <Smartphone :size="20" class="text-blue-500" />
+            </div>
+            <div>
+              <h2 class="text-base font-black text-zinc-100">设备推送</h2>
+              <p class="text-xs text-zinc-500 mt-0.5">管理当前设备的系统通知权限</p>
+            </div>
+          </div>
+          <NotificationsWebPushManager />
         </section>
 
         <!-- 社交账号绑定 -->
@@ -468,6 +517,9 @@ const localSettings = ref({
   songSelectedNotify: true,
   songPlayedNotify: true,
   songVotedNotify: true,
+  songRejectedNotify: true,
+  collaborationNotify: true,
+  broadcastReminderNotify: true,
   songVotedThreshold: 5,
   systemNotify: true,
   refreshInterval: 60,
@@ -550,6 +602,9 @@ const loadSettings = async () => {
         songSelectedNotify: response.data.songSelectedNotify || false,
         songPlayedNotify: response.data.songPlayedNotify || false,
         songVotedNotify: response.data.songVotedNotify || false,
+        songRejectedNotify: response.data.songRejectedNotify !== false,
+        collaborationNotify: response.data.collaborationNotify !== false,
+        broadcastReminderNotify: response.data.broadcastReminderNotify !== false,
         songVotedThreshold: response.data.songVotedThreshold || 5,
         systemNotify: response.data.systemNotify || true,
         refreshInterval: response.data.refreshInterval || 60,

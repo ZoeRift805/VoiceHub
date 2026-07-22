@@ -239,6 +239,13 @@
       "when": 1784530957225,
       "tag": "20260720070237_minimize-redis-add-song-query-indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784678400000,
+      "tag": "20260722000000_add_web_push_notifications",
+      "breakpoints": true
     }
   ]
 }

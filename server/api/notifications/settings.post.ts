@@ -47,6 +47,18 @@ export default defineEventHandler(async (event) => {
             body.songPlayedNotify !== undefined
               ? body.songPlayedNotify
               : dbSettings.songPlayedEnabled,
+          songRejectedEnabled:
+            body.songRejectedNotify !== undefined
+              ? body.songRejectedNotify
+              : dbSettings.songRejectedEnabled,
+          collaborationEnabled:
+            body.collaborationNotify !== undefined
+              ? body.collaborationNotify
+              : dbSettings.collaborationEnabled,
+          broadcastReminderEnabled:
+            body.broadcastReminderNotify !== undefined
+              ? body.broadcastReminderNotify
+              : dbSettings.broadcastReminderEnabled,
           songVotedEnabled:
             body.songVotedNotify !== undefined ? body.songVotedNotify : dbSettings.songVotedEnabled,
           songVotedThreshold:
@@ -72,6 +84,12 @@ export default defineEventHandler(async (event) => {
           songRequestEnabled:
             body.songSelectedNotify !== undefined ? body.songSelectedNotify : true,
           songPlayedEnabled: body.songPlayedNotify !== undefined ? body.songPlayedNotify : true,
+          songRejectedEnabled:
+            body.songRejectedNotify !== undefined ? body.songRejectedNotify : true,
+          collaborationEnabled:
+            body.collaborationNotify !== undefined ? body.collaborationNotify : true,
+          broadcastReminderEnabled:
+            body.broadcastReminderNotify !== undefined ? body.broadcastReminderNotify : true,
           songVotedEnabled: body.songVotedNotify !== undefined ? body.songVotedNotify : true,
           songVotedThreshold:
             body.songVotedThreshold !== undefined
@@ -93,6 +111,10 @@ export default defineEventHandler(async (event) => {
       songSelectedNotify: dbSettings.songRequestEnabled,
       songPlayedNotify: dbSettings.songPlayedEnabled,
       songVotedNotify: dbSettings.songVotedEnabled,
+      songRejectedNotify: dbSettings.songRejectedEnabled,
+      collaborationNotify: dbSettings.collaborationEnabled,
+      broadcastReminderNotify: dbSettings.broadcastReminderEnabled,
+      webPushEnabled: dbSettings.webPushEnabled,
       systemNotify: dbSettings.enabled,
       refreshInterval: dbSettings.refreshInterval,
       songVotedThreshold: dbSettings.songVotedThreshold

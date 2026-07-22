@@ -288,6 +288,12 @@
                               color="#8b5cf6"
                               name="message-circle"
                             />
+                            <Icon
+                              v-else-if="notification.type === 'BROADCAST_REMINDER'"
+                              :size="20"
+                              color="#0ea5e9"
+                              name="clock"
+                            />
                             <Icon v-else :size="20" color="#6b7280" name="bell" />
                           </div>
                           <div class="notification-title-row">
@@ -324,6 +330,9 @@
                               </span>
                               <span v-else-if="notification.type === 'COLLABORATION_RESPONSE'"
                                 >联合投稿回复</span
+                              >
+                              <span v-else-if="notification.type === 'BROADCAST_REMINDER'"
+                                >歌曲即将播出</span
                               >
                               <span v-else>系统通知</span>
                               <span v-if="!notification.read" class="unread-indicator" />

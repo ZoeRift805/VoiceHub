@@ -100,6 +100,12 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // 服务器私有键（不会暴露到客户端）
     jwtSecret,
+    webPush: {
+      privateKey: process.env.WEB_PUSH_PRIVATE_KEY || '',
+      subject: process.env.WEB_PUSH_SUBJECT || '',
+      cronSecret: process.env.WEB_PUSH_CRON_SECRET || '',
+      reminderMinutes: readNumberEnv(process.env.WEB_PUSH_REMINDER_MINUTES, 10)
+    },
     // Redis配置（可选）
     redisUrl: process.env.REDIS_URL || '',
     sentry: {
@@ -117,6 +123,8 @@ export default defineNuxtConfig({
     public: {
       host: process.env.NUXT_PUBLIC_HOST || '', // 用于 CORS 和反向代理的主机名验证
       apiBase: '/api',
+      webPushPublicKey:
+        process.env.NUXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || process.env.WEB_PUSH_PUBLIC_KEY || '',
       oauth: {
         github: !!process.env.GITHUB_CLIENT_ID,
         casdoor: !!process.env.CASDOOR_CLIENT_ID,
@@ -284,6 +292,11 @@ export default defineNuxtConfig({
           'Cache-Control': 'public, max-age=86400'
         }
       },
+      '/push-sw.js': {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        }
+      },
       // 图片、CSS、JS等静态资源缓存
       '/**/*.{png,jpg,jpeg,gif,webp,svg,ico}': {
         headers: {
@@ -419,11 +432,12 @@ export default defineNuxtConfig({
     },
     workbox: {
       navigateFallback: null,
-      globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}']
+      globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
+      importScripts: ['/push-sw.js']
     },
     devOptions: {
       enabled: true,
-      type: 'module'
+      type: 'classic'
     },
     injectRegister: 'auto'
   }

@@ -27,6 +27,12 @@ const SUPPORTED_ENV_VARIABLES = [
   'DEBUG_SQL',
   'WEBAUTHN_RP_ID',
   'WEBAUTHN_ORIGIN',
+  'WEB_PUSH_PUBLIC_KEY',
+  'NUXT_PUBLIC_WEB_PUSH_PUBLIC_KEY',
+  'WEB_PUSH_PRIVATE_KEY',
+  'WEB_PUSH_SUBJECT',
+  'WEB_PUSH_CRON_SECRET',
+  'WEB_PUSH_REMINDER_MINUTES',
   'GITHUB_CLIENT_ID',
   'GITHUB_CLIENT_SECRET',
   'CASDOOR_CLIENT_ID',
@@ -241,6 +247,22 @@ function printBuildEnvironment(rawNodeOptions) {
     'WEBAUTHN_ORIGIN',
     displayValue(process.env.WEBAUTHN_ORIGIN),
     providedState(process.env.WEBAUTHN_ORIGIN)
+  )
+  printItem(
+    'Web Push',
+    hiddenValue(process.env.NUXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || process.env.WEB_PUSH_PUBLIC_KEY),
+    isProvided(process.env.WEB_PUSH_PRIVATE_KEY) &&
+      isProvided(process.env.NUXT_PUBLIC_WEB_PUSH_PUBLIC_KEY || process.env.WEB_PUSH_PUBLIC_KEY) &&
+      isProvided(process.env.WEB_PUSH_SUBJECT)
+      ? '启用'
+      : '停用'
+  )
+  printSensitiveItem('WEB_PUSH_PRIVATE_KEY', process.env.WEB_PUSH_PRIVATE_KEY)
+  printSensitiveItem('WEB_PUSH_CRON_SECRET', process.env.WEB_PUSH_CRON_SECRET)
+  printItem(
+    'WEB_PUSH_REMINDER_MINUTES',
+    displayValue(process.env.WEB_PUSH_REMINDER_MINUTES),
+    process.env.WEB_PUSH_REMINDER_MINUTES || '10（默认值）'
   )
 
   log('\nOAuth 环境变量（仅用于后台导入）：', 'cyan')
