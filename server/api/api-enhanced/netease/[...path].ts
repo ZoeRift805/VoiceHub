@@ -11,6 +11,9 @@ const xeapiPublicKeyPath = join(tmpdir(), 'xeapi_public_key')
 
 let ncmConfigReady = false
 let ncmConfigPromise: Promise<void> | null = null
+const isCloudflareRuntime =
+  process.env.NITRO_PRESET?.startsWith('cloudflare') ||
+  process.env.CLOUDFLARE_WORKERS === 'true'
 
 const ensureNcmConfig = (): Promise<void> => {
   if (ncmConfigReady) return Promise.resolve()
@@ -36,7 +39,8 @@ const ensureNcmConfig = (): Promise<void> => {
 }
 
 // 预热配置，不阻塞启动
-ensureNcmConfig()
+// Cloudflare Workers 不支持网易云 SDK 的 Node 文件缓存初始化。
+if (!isCloudflareRuntime) ensureNcmConfig()
 
 const normalizeParams = (input: Record<string, any>) => {
   const output: Record<string, any> = {}
@@ -92,7 +96,7 @@ export default defineEventHandler(async (event) => {
   const params = { ...queryParams, ...bodyParams }
 
   // 等待 xeapi 公钥等配置就绪
-  await ensureNcmConfig()
+  if (!isCloudflareRuntime) await ensureNcmConfig()
 
   try {
     const result = await handler(params)
