@@ -160,7 +160,11 @@ function printSensitiveItem(name, value, result) {
 function resolveNitroPreset() {
   if (process.env.VERCEL) return 'vercel（由 VERCEL 检测）'
   if (process.env.NETLIFY) return 'netlify（由 NETLIFY 检测）'
-  if (process.env.CF_PAGES === '1' || process.env.CLOUDFLARE_WORKERS === 'true') {
+  if (
+    process.env.CF_PAGES === '1' ||
+    process.env.CLOUDFLARE_WORKERS === 'true' ||
+    (process.env.CI === 'true' && !process.env.VERCEL && !process.env.NETLIFY)
+  ) {
     return 'cloudflare_module（由 Cloudflare 检测）'
   }
   return `${process.env.NITRO_PRESET || 'node-server'}${process.env.NITRO_PRESET ? '' : '（默认值）'}`

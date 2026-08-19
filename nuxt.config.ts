@@ -58,7 +58,9 @@ const jwtSecret = process.env.JWT_SECRET || ''
 const isCloudflareDeployment =
   process.env.NITRO_PRESET?.startsWith('cloudflare') ||
   process.env.CF_PAGES === '1' ||
-  process.env.CLOUDFLARE_WORKERS === 'true'
+  process.env.CLOUDFLARE_WORKERS === 'true' ||
+  // Cloudflare Workers Builds 在构建阶段提供 CI，但不提供 Pages 专用变量。
+  (process.env.CI === 'true' && !process.env.VERCEL && !process.env.NETLIFY)
 
 // 构造绝对路径 Logo URL 用于 SEO 标签，如果没有 host，则回退为相对路径
 const host = process.env.NUXT_PUBLIC_HOST
