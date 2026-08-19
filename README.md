@@ -976,6 +976,10 @@ VoiceHub/
 │       └── url.ts             # URL处理工具
 ├── server/                # 服务端代码
 │   ├── api/                # API路由
+│   ├── shims/              # 运行时兼容桩
+│   │   ├── canvas.ts        # Cloudflare Workers canvas 可选依赖桩
+│   │   ├── xxhash.ts        # Redis 原生哈希可选依赖桩
+│   │   └── unblockmusic-utils.ts # 网易云 CLI 可选依赖桩
 │   │   ├── admin/          # 管理员API
 │   │   │   ├── api-keys/            # API密钥管理API
 │   │   │   │   ├── [id].delete.ts   # 删除API密钥
@@ -1354,7 +1358,8 @@ VoiceHub/
 ├── pnpm-workspace.yaml    # pnpm 依赖构建许可配置
 ├── README.md              # 项目说明文档
 ├── tsconfig.json          # TypeScript配置文件
-└── vercel.json            # Vercel部署配置
+├── vercel.json            # Vercel部署配置
+└── wrangler.jsonc         # Cloudflare Workers部署配置
 ```
 
 ### 目录说明

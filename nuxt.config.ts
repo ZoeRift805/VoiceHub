@@ -54,6 +54,12 @@ const sentryRuntimeEnabled =
     : process.env.NODE_ENV === 'production' && !isPreviewDeployment
 const jwtSecret = process.env.JWT_SECRET || ''
 
+// Cloudflare Workers 构建环境没有 Node.js HTTP 服务器，使用 Nitro 的模块化 Worker 产物。
+const isCloudflareDeployment =
+  process.env.NITRO_PRESET?.startsWith('cloudflare') ||
+  process.env.CF_PAGES === '1' ||
+  process.env.CLOUDFLARE_WORKERS === 'true'
+
 // 构造绝对路径 Logo URL 用于 SEO 标签，如果没有 host，则回退为相对路径
 const host = process.env.NUXT_PUBLIC_HOST
 if (!host && !siteLogo.startsWith('http') && process.env.NODE_ENV === 'production') {
@@ -737,15 +743,33 @@ export default defineNuxtConfig({
       ? 'vercel'
       : process.env.NETLIFY
         ? 'netlify'
-        : process.env.NITRO_PRESET || 'node-server',
+        : process.env.NITRO_PRESET || (isCloudflareDeployment ? 'cloudflare_module' : 'node-server'),
     // 增强错误处理和稳定性
     experimental: {
       wasm: true,
       asyncContext: true
     },
     externals: {
-      inline: ssrInlineLyricPackages
+      inline: ssrInlineLyricPackages,
+      // 网易云增强 SDK 含 Node CLI 文件（shebang），Workers 构建不能将其内联。
+      external: isCloudflareDeployment
+        ? ['@neteasecloudmusicapienhanced/api', '@neteasecloudmusicapienhanced/api/generateConfig.js']
+        : []
     },
+    alias: isCloudflareDeployment
+      ? {
+          // jsdom 将 canvas 作为可选 Node 原生依赖引入，Workers 中不提供该模块。
+          canvas: fileURLToPath(new URL('./server/shims/canvas.ts', import.meta.url)),
+          // Redis 客户端的可选原生哈希加速模块在 Workers 中不可用。
+          '@node-rs/xxhash': fileURLToPath(
+            new URL('./server/shims/xxhash.ts', import.meta.url)
+          ),
+          // 网易云 SDK 的 CLI 工具包含 shebang，Workers 不会调用其命令行能力。
+          '@neteasecloudmusicapienhanced/unblockmusic-utils': fileURLToPath(
+            new URL('./server/shims/unblockmusic-utils.ts', import.meta.url)
+          )
+        }
+      : {},
     timing: true,
     // 增加请求超时时间
     routeRules: {
