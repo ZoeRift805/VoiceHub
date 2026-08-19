@@ -9,13 +9,19 @@ import {fileURLToPath} from 'url';
 // 加载环境变量（优先使用工作目录的 .env，确保构建后运行时能正确加载）
 config({ path: path.resolve(process.cwd(), '.env') });
 
+// Cloudflare Workers 在模块初始化阶段通过 Nitro 注入 globalThis.__env__。
+const runtimeEnv =
+  (globalThis as typeof globalThis & { __env__?: Record<string, string | undefined> }).__env__ ||
+  process.env
+const databaseUrl = runtimeEnv.DATABASE_URL || process.env.DATABASE_URL
+
 // 检查环境变量
-if (!process.env.DATABASE_URL) {
+if (!databaseUrl) {
   throw new Error('DATABASE_URL environment variable is not set');
 }
 
 // 创建PostgreSQL连接
-const connectionString = process.env.DATABASE_URL;
+const connectionString = databaseUrl;
 
 // 检测数据库类型
 const getDatabaseHostname = (value: string) => {
