@@ -753,10 +753,7 @@ export default defineNuxtConfig({
     },
     externals: {
       inline: ssrInlineLyricPackages,
-      // 网易云增强 SDK 含 Node CLI 文件（shebang），Workers 构建不能将其内联。
-      external: isCloudflareDeployment
-        ? ['@neteasecloudmusicapienhanced/api', '@neteasecloudmusicapienhanced/api/generateConfig.js']
-        : []
+      external: []
     },
     alias: isCloudflareDeployment
       ? {
@@ -769,6 +766,13 @@ export default defineNuxtConfig({
           // 网易云 SDK 的 CLI 工具包含 shebang，Workers 不会调用其命令行能力。
           '@neteasecloudmusicapienhanced/unblockmusic-utils': fileURLToPath(
             new URL('./server/shims/unblockmusic-utils.ts', import.meta.url)
+          ),
+          // 网易云 SDK 依赖 Node 临时文件和 punycode，Workers 环境无法加载。
+          '@neteasecloudmusicapienhanced/api': fileURLToPath(
+            new URL('./server/shims/netease-api.ts', import.meta.url)
+          ),
+          '@neteasecloudmusicapienhanced/api/generateConfig.js': fileURLToPath(
+            new URL('./server/shims/netease-generate-config.ts', import.meta.url)
           )
         }
       : {},
