@@ -773,6 +773,10 @@ export default defineNuxtConfig({
           ),
           '@neteasecloudmusicapienhanced/api/generateConfig.js': fileURLToPath(
             new URL('./server/shims/netease-generate-config.ts', import.meta.url)
+          ),
+          // Sentry Node 的 require-in-the-middle 钩子无法在 Workers 中初始化。
+          '@sentry/node': fileURLToPath(
+            new URL('./server/shims/sentry-node.ts', import.meta.url)
           )
         }
       : {},

@@ -12,8 +12,7 @@ const xeapiPublicKeyPath = join(tmpdir(), 'xeapi_public_key')
 let ncmConfigReady = false
 let ncmConfigPromise: Promise<void> | null = null
 const isCloudflareRuntime =
-  process.env.NITRO_PRESET?.startsWith('cloudflare') ||
-  process.env.CLOUDFLARE_WORKERS === 'true'
+  typeof globalThis !== 'undefined' && 'WebSocketPair' in globalThis
 
 const ensureNcmConfig = (): Promise<void> => {
   if (ncmConfigReady) return Promise.resolve()

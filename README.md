@@ -981,7 +981,8 @@ VoiceHub/
 │   │   ├── xxhash.ts        # Redis 原生哈希可选依赖桩
 │   │   ├── unblockmusic-utils.ts # 网易云 CLI 可选依赖桩
 │   │   ├── netease-api.ts        # 网易云 API Workers 兼容桩
-│   │   └── netease-generate-config.ts # 网易云配置初始化兼容桩
+│   │   ├── netease-generate-config.ts # 网易云配置初始化兼容桩
+│   │   └── sentry-node.ts        # Sentry Node Workers 兼容桩
 │   │   ├── admin/          # 管理员API
 │   │   │   ├── api-keys/            # API密钥管理API
 │   │   │   │   ├── [id].delete.ts   # 删除API密钥
