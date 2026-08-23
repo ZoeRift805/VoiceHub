@@ -2,6 +2,7 @@
 
 import { spawn } from 'child_process'
 import { config } from 'dotenv'
+import { readFileSync, writeFileSync } from 'fs'
 import path from 'path'
 
 config({ path: path.resolve(process.cwd(), '.env'), quiet: true })
@@ -440,6 +441,30 @@ function runNuxtBuild() {
   })
 }
 
+function patchCloudflareEventEmitter() {
+  const isCloudflare =
+    process.env.NITRO_PRESET === 'cloudflare_module' ||
+    (process.env.CI === 'true' && !process.env.VERCEL && !process.env.NETLIFY)
+  if (!isCloudflare) return
+
+  const bundlePath = path.resolve(process.cwd(), '.output/server/chunks/_/nitro.mjs')
+  let bundle
+  try {
+    bundle = readFileSync(bundlePath, 'utf8')
+  } catch {
+    return
+  }
+
+  const eventEmitter = (name) =>
+    `class ${name}{constructor(){this._listeners=new Map}on(e,t){let s=this._listeners.get(e);return s||(s=new Set,this._listeners.set(e,s)),s.add(t),this}addListener(e,t){return this.on(e,t)}once(e,t){const s=(...n)=>{this.removeListener(e,s),t(...n)};return this.on(e,s)}emit(e,...t){const s=this._listeners.get(e);if(!s)return!1;for(const n of[...s])n(...t);return s.size>0}removeListener(e,t){const s=this._listeners.get(e);return s?.delete(t),s?.size===0&&this._listeners.delete(e),this}off(e,t){return this.removeListener(e,t)}removeAllListeners(e){return void 0===e?this._listeners.clear():this._listeners.delete(e),this}listeners(e){return[...(this._listeners.get(e)||[])]}listenerCount(e){return this._listeners.get(e)?.size||0}}`
+
+  const patched = bundle.replace(
+    /import\{EventEmitter as ([A-Za-z_$][\w$]*)\}from"node:events";/,
+    (_, name) => eventEmitter(name)
+  )
+  if (patched !== bundle) writeFileSync(bundlePath, patched)
+}
+
 async function build() {
   const rawNodeOptions = process.env.NODE_OPTIONS
   normalizeBlankEnvironment()
@@ -450,6 +475,7 @@ async function build() {
 
   log('🔨 开始执行 Nuxt 构建...', 'cyan')
   if (!(await runNuxtBuild())) throw new Error('Nuxt 构建失败')
+  patchCloudflareEventEmitter()
   log('✅ Nuxt 构建完成', 'green')
 }
 
