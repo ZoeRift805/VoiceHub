@@ -468,6 +468,14 @@ function patchCloudflareEventEmitter() {
 async function build() {
   const rawNodeOptions = process.env.NODE_OPTIONS
   normalizeBlankEnvironment()
+  if (
+    !process.env.NITRO_PRESET &&
+    process.env.CI === 'true' &&
+    !process.env.VERCEL &&
+    !process.env.NETLIFY
+  ) {
+    process.env.NITRO_PRESET = 'cloudflare_module'
+  }
   process.env.NODE_OPTIONS = resolveNodeOptions(rawNodeOptions)
   printBuildEnvironment(rawNodeOptions)
 
