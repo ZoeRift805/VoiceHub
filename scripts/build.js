@@ -477,6 +477,8 @@ function patchCloudflareEventEmitter() {
       /const Ui=\(Object\.assign\(Li\.prototype,i\.prototype\),Object\.assign\(Li\.prototype,Di\.prototype\),Li\);/,
       'const Ui=(Object.assign(Li.prototype,i.prototype),Object.assign(Li.prototype,Di.prototype),Li);N={Readable:i,Writable:Di,Duplex:Ui};R=i;P=Di;'
     )
+    patched = patched.replace(/extends R\b/g, 'extends i')
+    patched = patched.replace(/extends P\b/g, 'extends Di')
     if (patched !== bundle) {
       writeFileSync(bundlePath, patched)
       log(`已应用 Cloudflare Node 兼容补丁：${relativePath}`, 'dim')
