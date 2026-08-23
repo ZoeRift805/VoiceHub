@@ -469,16 +469,19 @@ function patchCloudflareEventEmitter() {
     )
     // Cloudflare 的 nodejs_compat 对 node:stream 的默认导出可能是模块命名空间。
     // Nitro 已在 bundle 中生成 unenv 的 Readable/Writable，实现本地绑定以避免 extends Module。
-    patched = patched.replace(
-      /import N,\{Readable as R,Writable as P\}from"node:stream";/,
-      'let N,R,P;'
+    const streamImport = patched.match(
+      /import ([A-Za-z_$][\w$]*),\{Readable as ([A-Za-z_$][\w$]*),Writable as ([A-Za-z_$][\w$]*)\}from"node:stream";/
     )
-    patched = patched.replace(
-      /const Ui=\(Object\.assign\(Li\.prototype,i\.prototype\),Object\.assign\(Li\.prototype,Di\.prototype\),Li\);/,
-      'const Ui=(Object.assign(Li.prototype,i.prototype),Object.assign(Li.prototype,Di.prototype),Li);N={Readable:i,Writable:Di,Duplex:Ui};R=i;P=Di;'
-    )
-    patched = patched.replace(/extends R\b/g, 'extends i')
-    patched = patched.replace(/extends P\b/g, 'extends Di')
+    if (streamImport) {
+      const [, namespaceName, readableName, writableName] = streamImport
+      patched = patched.replace(streamImport[0], `let ${namespaceName},${readableName},${writableName};`)
+      patched = patched.replace(
+        /const Ui=\(Object\.assign\(Li\.prototype,i\.prototype\),Object\.assign\(Li\.prototype,Di\.prototype\),Li\);/,
+        `const Ui=(Object.assign(Li.prototype,i.prototype),Object.assign(Li.prototype,Di.prototype),Li);${namespaceName}={Readable:i,Writable:Di,Duplex:Ui};${readableName}=i;${writableName}=Di;`
+      )
+      patched = patched.replace(new RegExp(`extends ${readableName}\\b`, 'g'), 'extends i')
+      patched = patched.replace(new RegExp(`extends ${writableName}\\b`, 'g'), 'extends Di')
+    }
     if (patched !== bundle) {
       writeFileSync(bundlePath, patched)
       log(`已应用 Cloudflare Node 兼容补丁：${relativePath}`, 'dim')

@@ -752,7 +752,7 @@ export default defineNuxtConfig({
       asyncContext: true
     },
     externals: {
-      inline: ssrInlineLyricPackages,
+      inline: [...ssrInlineLyricPackages, 'node:stream', 'stream', 'node:events', 'events'],
       external: []
     },
     alias: isCloudflareDeployment
