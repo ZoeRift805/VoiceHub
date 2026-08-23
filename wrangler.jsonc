@@ -1,8 +1,8 @@
 {
   "name": "voicehub",
   "main": ".output/server/index.mjs",
-  "compatibility_date": "2026-01-30",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2026-08-23",
+  "compatibility_flags": ["nodejs_compat", "nodejs_compat_v2"],
   "assets": {
     "directory": ".output/public",
     "binding": "ASSETS"

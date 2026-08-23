@@ -781,6 +781,12 @@ export default defineNuxtConfig({
           // Node Redis 客户端依赖不完整的 node:events Workers 兼容层。
           redis: fileURLToPath(
             new URL('./server/shims/redis.ts', import.meta.url)
+          ),
+          'node:events': fileURLToPath(
+            new URL('./server/shims/events.ts', import.meta.url)
+          ),
+          events: fileURLToPath(
+            new URL('./server/shims/events.ts', import.meta.url)
           )
         }
       : {},
@@ -883,6 +889,18 @@ export default defineNuxtConfig({
 
   // Vite 配置
   vite: {
+    resolve: isCloudflareDeployment
+      ? {
+          alias: {
+            'node:events': fileURLToPath(
+              new URL('./server/shims/events.ts', import.meta.url)
+            ),
+            events: fileURLToPath(
+              new URL('./server/shims/events.ts', import.meta.url)
+            )
+          }
+        }
+      : {},
     plugins: [wasm(), topLevelAwait()],
     optimizeDeps: {
       include: ['drizzle-orm'],
