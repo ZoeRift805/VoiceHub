@@ -493,6 +493,21 @@ function patchCloudflareEventEmitter() {
         `const Ui=(Object.assign(Li.prototype,i.prototype),Object.assign(Li.prototype,Di.prototype),Li);${socketName}=Socket;${isIpName}=isIP;`
       )
     }
+    // Cloudflare 会把未识别的 Node 内置模块绑定转换为模块命名空间，禁止其作为父类。
+    const importedBindings = new Set()
+    for (const match of patched.matchAll(/import\*as ([A-Za-z_$][\w$]*) from"node:[^"]+";/g)) {
+      importedBindings.add(match[1])
+    }
+    for (const match of patched.matchAll(/import\{([^}]+)\}from"node:[^"]+";/g)) {
+      for (const part of match[1].split(',')) {
+        const name = part.trim().split(/\s+as\s+/).at(-1)
+        if (name) importedBindings.add(name)
+      }
+    }
+    for (const name of importedBindings) {
+      const inherited = new RegExp(`class ([A-Za-z_$][\\w$]*) extends ${name}\\b`, 'g')
+      patched = patched.replace(inherited, 'class $1 extends Object')
+    }
     if (patched !== bundle) {
       writeFileSync(bundlePath, patched)
       log(`已应用 Cloudflare Node 兼容补丁：${relativePath}`, 'dim')
