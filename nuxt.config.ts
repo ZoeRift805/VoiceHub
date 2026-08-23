@@ -787,7 +787,9 @@ export default defineNuxtConfig({
           ),
           events: fileURLToPath(
             new URL('./server/shims/events.ts', import.meta.url)
-          )
+          ),
+          'node:stream': fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url)),
+          stream: fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url))
         }
       : {},
     timing: true,
@@ -897,7 +899,9 @@ export default defineNuxtConfig({
             ),
             events: fileURLToPath(
               new URL('./server/shims/events.ts', import.meta.url)
-            )
+            ),
+            'node:stream': fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url)),
+            stream: fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url))
           }
         }
       : {},
