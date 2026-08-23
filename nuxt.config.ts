@@ -777,6 +777,10 @@ export default defineNuxtConfig({
           // Sentry Node 的 require-in-the-middle 钩子无法在 Workers 中初始化。
           '@sentry/node': fileURLToPath(
             new URL('./server/shims/sentry-node.ts', import.meta.url)
+          ),
+          // Node Redis 客户端依赖不完整的 node:events Workers 兼容层。
+          redis: fileURLToPath(
+            new URL('./server/shims/redis.ts', import.meta.url)
           )
         }
       : {},
