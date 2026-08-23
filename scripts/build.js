@@ -463,11 +463,24 @@ function patchCloudflareEventEmitter() {
       continue
     }
 
-    const patched = bundle.replace(
+    let patched = bundle.replace(
       /import\{EventEmitter as ([A-Za-z_$][\w$]*)\}from"node:events";/,
       (_, name) => eventEmitter(name)
     )
-    if (patched !== bundle) writeFileSync(bundlePath, patched)
+    // Cloudflare 的 nodejs_compat 对 node:stream 的默认导出可能是模块命名空间。
+    // Nitro 已在 bundle 中生成 unenv 的 Readable/Writable，实现本地绑定以避免 extends Module。
+    patched = patched.replace(
+      /import N,\{Readable as R,Writable as P\}from"node:stream";/,
+      'let N,R,P;'
+    )
+    patched = patched.replace(
+      /const Ui=\(Object\.assign\(Li\.prototype,i\.prototype\),Object\.assign\(Li\.prototype,Di\.prototype\),Li\);/,
+      'const Ui=(Object.assign(Li.prototype,i.prototype),Object.assign(Li.prototype,Di.prototype),Li);N={Readable:i,Writable:Di,Duplex:Ui};R=i;P=Di;'
+    )
+    if (patched !== bundle) {
+      writeFileSync(bundlePath, patched)
+      log(`已应用 Cloudflare Node 兼容补丁：${relativePath}`, 'dim')
+    }
   }
 }
 
