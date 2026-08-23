@@ -482,6 +482,17 @@ function patchCloudflareEventEmitter() {
       patched = patched.replace(new RegExp(`extends ${readableName}\\b`, 'g'), 'extends i')
       patched = patched.replace(new RegExp(`extends ${writableName}\\b`, 'g'), 'extends Di')
     }
+    const netImport = patched.match(
+      /import\{Socket as ([A-Za-z_$][\w$]*),isIP as ([A-Za-z_$][\w$]*)\}from"node:net";/
+    )
+    if (netImport) {
+      const [, socketName, isIpName] = netImport
+      patched = patched.replace(netImport[0], `let ${socketName},${isIpName};`)
+      patched = patched.replace(
+        /const Ui=\(Object\.assign\(Li\.prototype,i\.prototype\),Object\.assign\(Li\.prototype,Di\.prototype\),Li\);/,
+        `const Ui=(Object.assign(Li.prototype,i.prototype),Object.assign(Li.prototype,Di.prototype),Li);${socketName}=Socket;${isIpName}=isIP;`
+      )
+    }
     if (patched !== bundle) {
       writeFileSync(bundlePath, patched)
       log(`已应用 Cloudflare Node 兼容补丁：${relativePath}`, 'dim')

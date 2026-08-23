@@ -986,6 +986,8 @@ VoiceHub/
 │   │   ├── redis.ts              # Redis Workers 兼容桩
 │   │   ├── events.ts             # Node 事件 API Workers 兼容桩
 │   │   └── stream.ts             # Node stream API Workers 兼容桩
+│   │   ├── net.ts                # Node net API Workers 兼容桩
+│   │   └── tls.ts                # Node tls API Workers 兼容桩
 │   │   ├── admin/          # 管理员API
 │   │   │   ├── api-keys/            # API密钥管理API
 │   │   │   │   ├── [id].delete.ts   # 删除API密钥

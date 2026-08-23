@@ -789,7 +789,11 @@ export default defineNuxtConfig({
             new URL('./server/shims/events.ts', import.meta.url)
           ),
           'node:stream': fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url)),
-          stream: fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url))
+          stream: fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url)),
+          'node:net': fileURLToPath(new URL('./server/shims/net.ts', import.meta.url)),
+          net: fileURLToPath(new URL('./server/shims/net.ts', import.meta.url)),
+          'node:tls': fileURLToPath(new URL('./server/shims/tls.ts', import.meta.url)),
+          tls: fileURLToPath(new URL('./server/shims/tls.ts', import.meta.url))
         }
       : {},
     timing: true,
@@ -901,7 +905,11 @@ export default defineNuxtConfig({
               new URL('./server/shims/events.ts', import.meta.url)
             ),
             'node:stream': fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url)),
-            stream: fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url))
+            stream: fileURLToPath(new URL('./server/shims/stream.ts', import.meta.url)),
+            'node:net': fileURLToPath(new URL('./server/shims/net.ts', import.meta.url)),
+            net: fileURLToPath(new URL('./server/shims/net.ts', import.meta.url)),
+            'node:tls': fileURLToPath(new URL('./server/shims/tls.ts', import.meta.url)),
+            tls: fileURLToPath(new URL('./server/shims/tls.ts', import.meta.url))
           }
         }
       : {},
