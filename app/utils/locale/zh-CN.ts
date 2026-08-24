@@ -291,6 +291,8 @@ export const common = {
     empty: '没有找到相关记录',
     votes: (count: number) => `${count} 票`,
     requests: (count: number) => `${count} 人申请`,
+    totalSubmissions: '总投稿',
+    playedSubmissions: '已播放',
     requester: '投稿人:',
     tabs: {
       submitted: '投稿歌曲',
@@ -1294,7 +1296,7 @@ export const pages = {
       publicNote: '公开备注',
       privateNote: '仅管理员可见',
       songsCount: (count: number) => `${count}首`
-      ,precacheToday: '预缓存今日排期', precacheTitle: '今日排期时长', totalDuration: '总时长'
+      ,precacheToday: '预缓存今日排期', precacheTitle: '今日排期时长', totalDuration: '总时长', unknownDuration: '未知'
     },
     songList: {
       mobileSearchPlaceholder: '搜索点播记录...',

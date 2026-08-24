@@ -84,6 +84,17 @@
                 </div>
               </div>
 
+              <div class="flex items-center gap-6 px-6 py-3 border-b border-border-secondary bg-bg-tertiary-20">
+                <div class="flex items-baseline gap-2">
+                  <span class="text-xs text-text-tertiary">{{ locale.totalSubmissions }}</span>
+                  <strong class="text-lg font-semibold text-text-primary">{{ userSongs.submittedStats?.total ?? 0 }}</strong>
+                </div>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-xs text-text-tertiary">{{ locale.playedSubmissions }}</span>
+                  <strong class="text-lg font-semibold text-success">{{ userSongs.submittedStats?.played ?? 0 }}</strong>
+                </div>
+              </div>
+
               <!-- 工具栏 (标签页 + 过滤) -->
               <div
                 class="flex flex-col sm:flex-row items-center justify-between border-b border-border-secondary bg-bg-secondary-50"

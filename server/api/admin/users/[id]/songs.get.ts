@@ -227,6 +227,10 @@ export default defineEventHandler(async (event) => {
         scheduled: submittedScheduleMap.has(song.id),
         voteCount: submittedVoteCountsMap.get(song.id) || 0
       })),
+      submittedStats: {
+        total: submittedSongs.length,
+        played: submittedSongs.filter((song) => song.played === true).length
+      },
       votedSongs: votedSongs.map((vote) => ({
         id: vote.songId,
         title: vote.songTitle,

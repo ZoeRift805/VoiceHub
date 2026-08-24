@@ -34,5 +34,13 @@ export default defineEventHandler(async (event) => {
     items.push({ ...song, durationSeconds: duration || null, durationText: formatDuration(duration) })
   }
   const totalSeconds = items.reduce((sum, item) => sum + (item.durationSeconds || 0), 0)
-  return { success: true, date: start.toISOString().slice(0, 10), items, totalSeconds, totalText: formatDuration(totalSeconds) }
+  const unknownCount = items.filter((item) => !Number.isFinite(item.durationSeconds) || item.durationSeconds < 1).length
+  return {
+    success: true,
+    date: start.toISOString().slice(0, 10),
+    items,
+    totalSeconds,
+    unknownCount,
+    totalText: `${formatDuration(totalSeconds)}${unknownCount > 0 ? '+' : ''}`
+  }
 })

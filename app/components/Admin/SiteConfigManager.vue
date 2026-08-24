@@ -468,9 +468,12 @@
             </div>
           </div>
 
-          <div class="p-4 bg-bg-primary-50 border border-border-secondary rounded-xl space-y-3">
-            <p class="text-xs font-black text-text-primary">{{ locale.adminDisplayInfo }}</p>
-            <label class="flex items-center gap-3 text-xs text-text-secondary"><input v-model="formData.showAdminSchedulePlatform" type="checkbox" class="w-4 h-4" />{{ locale.showAdminSchedulePlatform }}</label>
+          <div class="p-4 bg-bg-primary-50 border border-border-secondary rounded-xl flex items-center justify-between gap-4">
+            <p class="text-xs font-black text-text-primary shrink-0">{{ locale.adminDisplayInfo }}</p>
+            <label class="flex min-w-0 items-center gap-3 text-xs text-text-secondary cursor-pointer">
+              <input v-model="formData.showAdminSchedulePlatform" type="checkbox" class="w-4 h-4 shrink-0" />
+              <span class="truncate">{{ locale.showAdminSchedulePlatform }}</span>
+            </label>
           </div>
 
           <div class="p-4 bg-bg-primary-50 border border-border-secondary rounded-xl space-y-4">

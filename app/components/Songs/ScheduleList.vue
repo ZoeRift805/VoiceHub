@@ -318,7 +318,7 @@
       <div class="precache-dialog">
         <div class="precache-dialog-header"><h3>{{ locale.precacheTitle || '今日排期时长' }}</h3><button type="button" @click="precacheResult = null"><Icon name="x" :size="18" /></button></div>
         <div class="precache-total">{{ locale.totalDuration || '总时长' }}：<strong>{{ precacheResult.totalText }}</strong></div>
-        <div class="precache-items"><div v-for="item in precacheResult.items" :key="item.id" class="precache-item"><span>{{ item.title }} - {{ item.artist }}</span><b>{{ item.durationText }}</b></div></div>
+        <div class="precache-items"><div v-for="item in precacheResult.items" :key="item.id" class="precache-item"><span>{{ item.title }} - {{ item.artist }}</span><b>{{ item.durationSeconds ? item.durationText : (locale.unknownDuration || '未知') }}</b></div></div>
       </div>
     </div>
   </Teleport>

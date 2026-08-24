@@ -280,6 +280,8 @@ export const common = {
     empty: 'No matching records',
     votes: (count: number) => `${count} votes`,
     requests: (count: number) => `${count} requests`,
+    totalSubmissions: 'Total submissions',
+    playedSubmissions: 'Played',
     requester: 'Requester:',
     tabs: {
       submitted: 'Submitted Songs',
@@ -1285,7 +1287,7 @@ export const pages = {
       publicNote: 'Public Note',
       privateNote: 'Admin Only',
       songsCount: (count: number) => `${count} songs`
-      ,precacheToday: 'Precache today', precacheTitle: "Today's schedule duration", totalDuration: 'Total'
+      ,precacheToday: 'Precache today', precacheTitle: "Today's schedule duration", totalDuration: 'Total', unknownDuration: 'Unknown'
     },
     songList: {
       mobileSearchPlaceholder: 'Search requests...',
