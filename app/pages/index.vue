@@ -224,6 +224,7 @@
                   :error="error"
                   :loading="loading"
                   :schedules="publicSchedules"
+                  :is-admin="isAdmin"
                   @semester-change="handleSemesterChange"
                 />
               </div>

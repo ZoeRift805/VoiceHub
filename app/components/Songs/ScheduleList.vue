@@ -31,6 +31,10 @@
           >
             <Icon :size="20" color="var(--text-primary)" name="music" />
           </button>
+          <button v-if="isAdmin" class="precache-btn" type="button" :disabled="precacheLoading" @click="precacheToday">
+            <Icon :size="16" :name="precacheLoading ? 'refresh' : 'clock'" :class="{ 'animate-spin': precacheLoading }" />
+            <span>{{ locale.precacheToday }}</span>
+          </button>
         </div>
 
         <!-- 移动端日期选择弹窗 -->
@@ -92,6 +96,10 @@
           >
             <Icon :size="18" color="var(--text-primary)" name="music" />
             <span>{{ locale.addToPlaylist }}</span>
+          </button>
+          <button v-if="isAdmin" class="precache-btn" type="button" :disabled="precacheLoading" @click="precacheToday">
+            <Icon :size="16" :name="precacheLoading ? 'refresh' : 'clock'" :class="{ 'animate-spin': precacheLoading }" />
+            <span>{{ locale.precacheToday }}</span>
           </button>
         </div>
 
@@ -223,6 +231,8 @@
                           </button>
                         </h3>
                         <div class="song-meta">
+                          <span v-if="isAdmin && showAdminPlatform && schedule.song.musicPlatform" class="admin-platform" :class="`platform-${schedule.song.musicPlatform}`">{{ schedule.song.musicPlatform }}</span>
+                          <span v-if="isAdmin && showAdminStats && schedule.song.requestCount != null" class="admin-stats">{{ locale.requestStats || '投稿' }} {{ schedule.song.requestCount }} · {{ locale.playedStats || '播出' }} {{ schedule.song.playedCount || 0 }}</span>
                           <span
                             v-if="schedule.replayRequestId != null"
                             :title="
@@ -298,6 +308,16 @@
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div v-if="precacheResult" class="precache-modal" @click.self="precacheResult = null">
+      <div class="precache-dialog">
+        <div class="precache-dialog-header"><h3>{{ locale.precacheTitle || '今日排期时长' }}</h3><button type="button" @click="precacheResult = null"><Icon name="x" :size="18" /></button></div>
+        <div class="precache-total">{{ locale.totalDuration || '总时长' }}：<strong>{{ precacheResult.totalText }}</strong></div>
+        <div class="precache-items"><div v-for="item in precacheResult.items" :key="item.id" class="precache-item"><span>{{ item.title }} - {{ item.artist }}</span><b>{{ item.durationText }}</b></div></div>
+      </div>
+    </div>
+  </Teleport>
 
   <Teleport to="body">
     <Transition
@@ -670,6 +690,7 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  isAdmin: { type: Boolean, default: false },
   loading: {
     type: Boolean,
     default: false
@@ -689,6 +710,22 @@ const { t: callLocale } = useLocaleText(locale)
 
 // 获取播放时段启用状态
 const { playTimeEnabled } = useSongs()
+const { siteConfig } = useSiteConfig()
+const showAdminPlatform = computed(() => siteConfig.value?.showAdminSchedulePlatform === true)
+const showAdminStats = computed(() => siteConfig.value?.showAdminScheduleUserStats === true)
+const precacheLoading = ref(false)
+const precacheResult = ref(null)
+const precacheToday = async () => {
+  if (precacheLoading.value) return
+  precacheLoading.value = true
+  try {
+    precacheResult.value = await $fetch('/api/admin/schedule/precache-today', { method: 'POST' })
+  } catch (error) {
+    console.error('预缓存今日排期失败', error)
+  } finally {
+    precacheLoading.value = false
+  }
+}
 
 // 确保schedules不为null
 const safeSchedules = computed(() => props.schedules || [])
@@ -1909,6 +1946,18 @@ const vRipple = {
   gap: 1rem;
   flex-shrink: 0; /* 防止被压缩 */
 }
+
+.precache-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border-secondary); border-radius: 8px; color: var(--text-secondary); background: var(--bg-secondary); font-size: 12px; }
+.precache-btn:hover { color: var(--text-primary); border-color: var(--primary); }
+.precache-btn:disabled { opacity: .55; cursor: wait; }
+.admin-platform { margin-right: 8px; font-size: 11px; font-weight: 700; color: var(--primary); }
+.platform-tencent { color: #1683ff; } .platform-bilibili { color: #00aeec; } .platform-migu { color: #e94b73; }
+.admin-stats { font-size: 11px; color: var(--text-tertiary); }
+.precache-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.45); }
+.precache-dialog { width: min(560px, 100%); max-height: 80vh; overflow: auto; padding: 20px; border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 16px 48px rgba(0,0,0,.25); }
+.precache-dialog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; } .precache-dialog-header button { color: var(--text-tertiary); }
+.precache-total { padding: 12px; margin-bottom: 10px; border-radius: 8px; background: var(--bg-primary-50); } .precache-items { display: grid; gap: 6px; }
+.precache-item { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-secondary); font-size: 13px; }
 
 .current-date {
   font-family: 'MiSans', sans-serif;

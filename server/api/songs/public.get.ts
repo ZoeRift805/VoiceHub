@@ -171,6 +171,8 @@ export default defineEventHandler(async (event) => {
         COALESCE(ac.collaborators, '[]'::jsonb) AS collaborators,
         COALESCE(rc.replay_count, 0) AS "replayRequestCount",
         COALESCE(rr.requesters, '[]'::jsonb) AS "replayRequesters",
+        (SELECT COUNT(*)::int FROM "Song" rs WHERE rs."requesterId" = s."requesterId") AS "requestCount",
+        (SELECT COUNT(*)::int FROM "Song" ps WHERE ps."requesterId" = s."requesterId" AND ps.played = true) AS "playedCount",
         COALESCE(
           (SELECT "hideStudentInfo" FROM "SystemSettings" LIMIT 1),
           true
@@ -293,6 +295,8 @@ export default defineEventHandler(async (event) => {
           requesterId: row.requesterId ? Number(row.requesterId) : null,
           replayRequestCount,
           replayRequesters,
+          requestCount: isAdmin ? Number(row.requestCount || 0) : null,
+          playedCount: isAdmin ? Number(row.playedCount || 0) : null,
           isReplay: linkedReplayRequestId !== null
         }
       }

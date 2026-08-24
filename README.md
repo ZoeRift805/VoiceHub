@@ -1075,6 +1075,7 @@ VoiceHub/
 │   │   │   │   ├── copy.post.ts     # 复制排期到指定日期
 │   │   │   │   ├── draft.post.ts    # 保存排期草稿
 │   │   │   │   ├── full.get.ts      # 获取完整排期数据（包含草稿）
+│   │   │   │   ├── precache-today.post.ts # 预缓存今日排期并统计时长
 │   │   │   │   ├── move-date.post.ts # 排期日期迁移
 │   │   │   │   ├── publish.post.ts  # 发布排期草稿
 │   │   │   │   ├── remove-all-date.post.ts # 清空某日全部排期

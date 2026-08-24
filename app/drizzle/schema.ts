@@ -195,6 +195,8 @@ export const systemSettings = pgTable('SystemSettings', {
   monthlySubmissionLimit: integer('monthlySubmissionLimit'),
   showBlacklistKeywords: boolean('showBlacklistKeywords').default(false).notNull(),
   hideStudentInfo: boolean('hideStudentInfo').default(true).notNull(),
+  showAdminSchedulePlatform: boolean('showAdminSchedulePlatform').default(false).notNull(),
+  showAdminScheduleUserStats: boolean('showAdminScheduleUserStats').default(false).notNull(),
   // SMTP 邮件配置
   smtpEnabled: boolean('smtpEnabled').default(false).notNull(),
   smtpHost: text('smtpHost'),

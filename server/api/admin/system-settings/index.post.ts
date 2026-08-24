@@ -151,6 +151,15 @@ export default defineEventHandler(async (event) => {
       updateData.hideStudentInfo = body.hideStudentInfo
     }
 
+    for (const field of ['showAdminSchedulePlatform', 'showAdminScheduleUserStats']) {
+      if (body[field] !== undefined) {
+        if (typeof body[field] !== 'boolean') {
+          throw createApiError(400, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, `${field} 必须是布尔值`)
+        }
+        updateData[field] = body[field]
+      }
+    }
+
     if (body.enablePlayTimeSelection !== undefined) {
       if (typeof body.enablePlayTimeSelection !== 'boolean') {
         throw createError({
