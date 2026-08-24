@@ -192,7 +192,78 @@ export default defineEventHandler(async (event) => {
       ORDER BY sch."playDate", sch.sequence
     `
 
-    const rows = await client.unsafe(schedulesQuery, params)
+    let rows: any[]
+    try {
+      rows = await client.unsafe(schedulesQuery, params)
+    } catch (primaryError: any) {
+      console.error('[Songs API] 公共排期扩展查询失败，尝试核心排期查询:', {
+        code: primaryError?.code,
+        detail: primaryError?.detail,
+        hint: primaryError?.hint,
+        message: primaryError?.message
+      })
+      const fallbackQuery = `
+        SELECT
+          sch.id,
+          to_char(sch."playDate", 'YYYY-MM-DD') AS "playDate",
+          sch.sequence,
+          NULL::integer AS "replayRequestId",
+          sch.played AS "schedulePlayed",
+          sch."playTimeId",
+          s.id AS "songId",
+          s.title,
+          s.artist,
+          s.played AS "songPlayed",
+          s.cover,
+          s."musicPlatform",
+          s."musicId",
+          NULL::integer AS "durationSeconds",
+          NULL::text AS "playUrl",
+          s.semester,
+          s."requesterId",
+          false AS "usedCardCode",
+          s."createdAt",
+          NULL::text AS "submissionNote",
+          false AS "submissionNotePublic",
+          NULL::text AS "effectiveSubmissionNote",
+          false AS "effectiveSubmissionNotePublic",
+          s."preferredPlayTimeId" AS "effectivePlayTimeId",
+          NULL::integer AS "replayRequesterUserId",
+          u.name AS "requesterName",
+          u.grade AS "requesterGrade",
+          u.class AS "requesterClass",
+          1::int AS "requesterNameCount",
+          1::int AS "requesterGradeCount",
+          pt.id AS "playTimeRecordId",
+          pt.name AS "playTimeName",
+          pt."startTime" AS "playTimeStart",
+          pt."endTime" AS "playTimeEnd",
+          pt.enabled AS "playTimeEnabled",
+          0::int AS "voteCount",
+          '[]'::jsonb AS collaborators,
+          0::int AS "replayRequestCount",
+          '[]'::jsonb AS "replayRequesters",
+          COALESCE((SELECT "hideStudentInfo" FROM "SystemSettings" LIMIT 1), true) AS "hideStudentInfo"
+        FROM "Schedule" sch
+        INNER JOIN "Song" s ON s.id = sch."songId"
+        LEFT JOIN "User" u ON u.id = s."requesterId"
+        LEFT JOIN "PlayTime" pt ON pt.id = sch."playTimeId"
+        WHERE 1 = 1
+        ${semesterCondition}
+        ORDER BY sch."playDate", sch.sequence
+      `
+      try {
+        rows = await client.unsafe(fallbackQuery, params)
+      } catch (fallbackError: any) {
+        console.error('[Songs API] 公共排期核心查询也失败:', {
+          code: fallbackError?.code,
+          detail: fallbackError?.detail,
+          hint: fallbackError?.hint,
+          message: fallbackError?.message
+        })
+        throw primaryError
+      }
+    }
     const requesterStats = new Map<number, { requestCount: number; playedCount: number }>()
     if (isAdmin && rows.length > 0) {
       try {
