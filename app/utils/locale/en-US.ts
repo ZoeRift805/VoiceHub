@@ -91,7 +91,6 @@ export const siteConfig = {
   hideStudentInfoDesc: 'Hide full student IDs and real names from non-admin users in request lists and schedule previews.',
   adminDisplayInfo: 'Admin Home Details',
   showAdminSchedulePlatform: 'Show submission platform on home',
-  showAdminScheduleUserStats: 'Show user request and played counts on home',
   telemetryEnabled: 'Enable Error Tracking',
   telemetryEnabledDesc: 'Enabled by default. When on, the system sends frontend/backend error events and instance-online events to Sentry for instance statistics and deployment diagnostics.',
   telemetryPrivacy: 'No personal identity information, user data, or business content is collected.',
@@ -1286,7 +1285,7 @@ export const pages = {
       publicNote: 'Public Note',
       privateNote: 'Admin Only',
       songsCount: (count: number) => `${count} songs`
-      ,precacheToday: 'Precache today', precacheTitle: "Today's schedule duration", totalDuration: 'Total', requestStats: 'Requests', playedStats: 'Played'
+      ,precacheToday: 'Precache today', precacheTitle: "Today's schedule duration", totalDuration: 'Total'
     },
     songList: {
       mobileSearchPlaceholder: 'Search requests...',

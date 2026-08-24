@@ -100,7 +100,6 @@ export const siteConfig = {
   hideStudentInfoDesc: '开启后，非管理员用户在前端点歌列表、排期预览中将无法查看投稿学生的完整学号与真实姓名。',
   adminDisplayInfo: '管理员首页信息',
   showAdminSchedulePlatform: '首页显示投稿平台',
-  showAdminScheduleUserStats: '首页显示用户投稿次数和播出次数',
   telemetryEnabled: '启用错误追踪与遥测',
   telemetryEnabledDesc: '默认开启。开启后，系统会向 Sentry 发送前后端错误事件和实例在线事件（仅包含技术错误信息、实例 ID、请求路径和运行时环境），用于统计实例数量并定位部署问题。',
   telemetryPrivacy: '不会收集任何个人身份信息、用户数据或业务内容。',
@@ -1295,7 +1294,7 @@ export const pages = {
       publicNote: '公开备注',
       privateNote: '仅管理员可见',
       songsCount: (count: number) => `${count}首`
-      ,precacheToday: '预缓存今日排期', precacheTitle: '今日排期时长', totalDuration: '总时长', requestStats: '投稿', playedStats: '播出'
+      ,precacheToday: '预缓存今日排期', precacheTitle: '今日排期时长', totalDuration: '总时长'
     },
     songList: {
       mobileSearchPlaceholder: '搜索点播记录...',

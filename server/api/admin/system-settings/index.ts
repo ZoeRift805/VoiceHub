@@ -48,7 +48,6 @@ export default defineEventHandler(async (event) => {
           monthlySubmissionLimit: null,
           showBlacklistKeywords: false,
           showAdminSchedulePlatform: false,
-          showAdminScheduleUserStats: false,
           enableCollaborativeSubmission: true,
           enableSubmissionRemarks: false,
           enableSubmissionRestriction: false,

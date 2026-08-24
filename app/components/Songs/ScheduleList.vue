@@ -31,10 +31,6 @@
           >
             <Icon :size="20" color="var(--text-primary)" name="music" />
           </button>
-          <button v-if="isAdmin" class="precache-btn" type="button" :disabled="precacheLoading" @click="precacheToday">
-            <Icon :size="16" :name="precacheLoading ? 'refresh' : 'clock'" :class="{ 'animate-spin': precacheLoading }" />
-            <span>{{ locale.precacheToday }}</span>
-          </button>
         </div>
 
         <!-- 移动端日期选择弹窗 -->
@@ -88,6 +84,11 @@
       <div class="schedule-content">
         <div class="schedule-header">
           <h2 class="current-date" v-html="currentDateFormatted" />
+          <div class="schedule-actions">
+          <button v-if="isAdmin" class="precache-btn" type="button" :disabled="precacheLoading" @click="precacheToday">
+            <Icon :size="16" :name="precacheLoading ? 'refresh' : 'clock'" :class="{ 'animate-spin': precacheLoading }" />
+            <span>{{ locale.precacheToday }}</span>
+          </button>
           <button
             v-if="isNeteaseLoggedIn"
             class="add-playlist-btn"
@@ -97,10 +98,7 @@
             <Icon :size="18" color="var(--text-primary)" name="music" />
             <span>{{ locale.addToPlaylist }}</span>
           </button>
-          <button v-if="isAdmin" class="precache-btn" type="button" :disabled="precacheLoading" @click="precacheToday">
-            <Icon :size="16" :name="precacheLoading ? 'refresh' : 'clock'" :class="{ 'animate-spin': precacheLoading }" />
-            <span>{{ locale.precacheToday }}</span>
-          </button>
+          </div>
         </div>
 
         <!-- 使用Transition组件包裹内容 -->
@@ -231,8 +229,7 @@
                           </button>
                         </h3>
                         <div class="song-meta">
-                          <span v-if="isAdmin && showAdminPlatform && schedule.song.musicPlatform" class="admin-platform" :class="`platform-${schedule.song.musicPlatform}`">{{ schedule.song.musicPlatform }}</span>
-                          <span v-if="isAdmin && showAdminStats && schedule.song.requestCount != null" class="admin-stats">{{ locale.requestStats || '投稿' }} {{ schedule.song.requestCount }} · {{ locale.playedStats || '播出' }} {{ schedule.song.playedCount || 0 }}</span>
+                          <span v-if="isAdmin && showAdminPlatform && schedule.song.musicPlatform" class="admin-platform" :class="`platform-${schedule.song.musicPlatform}`">{{ getPlatformLabel(schedule.song.musicPlatform) }}</span>
                           <span
                             v-if="schedule.replayRequestId != null"
                             :title="
@@ -674,6 +671,7 @@ import AppSpinner from '~/components/UI/Common/AppSpinner.vue'
 import ConfirmDialog from '~/components/UI/ConfirmDialog.vue'
 import CustomSelect from '~/components/UI/Common/CustomSelect.vue'
 import { convertToHttps } from '~/utils/url'
+import { getPlatformDisplayName } from '~/utils/platforms'
 import { isBilibiliSong } from '~/utils/bilibiliSource'
 import { getMusicUrl as resolveMusicUrl } from '~/utils/musicUrl'
 import { useLocale } from '~/utils/locale'
@@ -710,9 +708,9 @@ const { t: callLocale } = useLocaleText(locale)
 
 // 获取播放时段启用状态
 const { playTimeEnabled } = useSongs()
-const { siteConfig } = useSiteConfig()
-const showAdminPlatform = computed(() => siteConfig.value?.showAdminSchedulePlatform === true)
-const showAdminStats = computed(() => siteConfig.value?.showAdminScheduleUserStats === true)
+const { siteConfig, isLoaded: siteConfigLoaded } = useSiteConfig()
+const showAdminPlatform = computed(() => siteConfigLoaded.value && siteConfig.value?.showAdminSchedulePlatform !== false)
+const getPlatformLabel = (platform) => getPlatformDisplayName(platform, siteConfig.value, currentLocale.value)
 const precacheLoading = ref(false)
 const precacheResult = ref(null)
 const precacheToday = async () => {
@@ -1947,12 +1945,13 @@ const vRipple = {
   flex-shrink: 0; /* 防止被压缩 */
 }
 
+.schedule-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; min-width: 0; }
+
 .precache-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border-secondary); border-radius: 8px; color: var(--text-secondary); background: var(--bg-secondary); font-size: 12px; }
 .precache-btn:hover { color: var(--text-primary); border-color: var(--primary); }
 .precache-btn:disabled { opacity: .55; cursor: wait; }
 .admin-platform { margin-right: 8px; font-size: 11px; font-weight: 700; color: var(--primary); }
 .platform-tencent { color: #1683ff; } .platform-bilibili { color: #00aeec; } .platform-migu { color: #e94b73; }
-.admin-stats { font-size: 11px; color: var(--text-tertiary); }
 .precache-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.45); }
 .precache-dialog { width: min(560px, 100%); max-height: 80vh; overflow: auto; padding: 20px; border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 16px 48px rgba(0,0,0,.25); }
 .precache-dialog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; } .precache-dialog-header button { color: var(--text-tertiary); }

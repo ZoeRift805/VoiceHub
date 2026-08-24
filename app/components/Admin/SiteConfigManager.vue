@@ -471,7 +471,6 @@
           <div class="p-4 bg-bg-primary-50 border border-border-secondary rounded-xl space-y-3">
             <p class="text-xs font-black text-text-primary">{{ locale.adminDisplayInfo }}</p>
             <label class="flex items-center gap-3 text-xs text-text-secondary"><input v-model="formData.showAdminSchedulePlatform" type="checkbox" class="w-4 h-4" />{{ locale.showAdminSchedulePlatform }}</label>
-            <label class="flex items-center gap-3 text-xs text-text-secondary"><input v-model="formData.showAdminScheduleUserStats" type="checkbox" class="w-4 h-4" />{{ locale.showAdminScheduleUserStats }}</label>
           </div>
 
           <div class="p-4 bg-bg-primary-50 border border-border-secondary rounded-xl space-y-4">
@@ -749,8 +748,7 @@ const formData = ref({
   monthlySubmissionLimit: null,
   showBlacklistKeywords: false,
   hideStudentInfo: true,
-  showAdminSchedulePlatform: false,
-  showAdminScheduleUserStats: false,
+  showAdminSchedulePlatform: true,
   forcePasswordChangeOnFirstLogin: false,
   telemetryEnabled: true,
   captchaEnabled: false,
@@ -879,7 +877,6 @@ const loadConfig = async () => {
       showBlacklistKeywords: !!data.showBlacklistKeywords,
       hideStudentInfo: data.hideStudentInfo ?? true,
       showAdminSchedulePlatform: data.showAdminSchedulePlatform === true,
-      showAdminScheduleUserStats: data.showAdminScheduleUserStats === true,
       forcePasswordChangeOnFirstLogin: data.forcePasswordChangeOnFirstLogin === true,
       telemetryEnabled: !!data.telemetryEnabled,
       captchaEnabled: !!data.captchaEnabled,
