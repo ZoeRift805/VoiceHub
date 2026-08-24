@@ -172,6 +172,14 @@
                         <div v-else class="text-cover">
                           {{ getFirstChar(schedule.song.title) }}
                         </div>
+                        <span
+                          v-if="isAdmin && schedule.song.musicPlatform"
+                          class="admin-platform-badge"
+                          :class="`platform-${schedule.song.musicPlatform}`"
+                          :title="getPlatformLabel(schedule.song.musicPlatform)"
+                        >
+                          {{ getPlatformShortLabel(schedule.song.musicPlatform) }}
+                        </span>
                         <!-- 播放按钮 (仅桌面端显示) -->
                         <div
                           v-if="
@@ -229,7 +237,6 @@
                           </button>
                         </h3>
                         <div class="song-meta">
-                          <span v-if="isAdmin && showAdminPlatform && schedule.song.musicPlatform" class="admin-platform" :class="`platform-${schedule.song.musicPlatform}`">{{ getPlatformLabel(schedule.song.musicPlatform) }}</span>
                           <span
                             v-if="schedule.replayRequestId != null"
                             :title="
@@ -708,9 +715,14 @@ const { t: callLocale } = useLocaleText(locale)
 
 // 获取播放时段启用状态
 const { playTimeEnabled } = useSongs()
-const { siteConfig, isLoaded: siteConfigLoaded } = useSiteConfig()
-const showAdminPlatform = computed(() => siteConfigLoaded.value && siteConfig.value?.showAdminSchedulePlatform !== false)
+const { siteConfig } = useSiteConfig()
 const getPlatformLabel = (platform) => getPlatformDisplayName(platform, siteConfig.value, currentLocale.value)
+const getPlatformShortLabel = (platform) => {
+  const labels = currentLocale.value === 'en-US'
+    ? { netease: 'NE', tencent: 'QQ', bilibili: 'Bili', migu: 'Migu' }
+    : { netease: '网易', tencent: 'QQ', bilibili: 'B站', migu: '咪咕' }
+  return labels[platform] || getPlatformLabel(platform)
+}
 const precacheLoading = ref(false)
 const precacheResult = ref(null)
 const precacheToday = async () => {
@@ -1945,18 +1957,22 @@ const vRipple = {
   flex-shrink: 0; /* 防止被压缩 */
 }
 
-.schedule-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; min-width: 0; }
+.schedule-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; min-width: 0; max-width: 100%; flex: 0 1 auto; flex-wrap: wrap; }
 
 .precache-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border-secondary); border-radius: 8px; color: var(--text-secondary); background: var(--bg-secondary); font-size: 12px; }
 .precache-btn:hover { color: var(--text-primary); border-color: var(--primary); }
 .precache-btn:disabled { opacity: .55; cursor: wait; }
-.admin-platform { margin-right: 8px; font-size: 11px; font-weight: 700; color: var(--primary); }
+.admin-platform-badge { position: absolute; left: 3px; bottom: 3px; z-index: 2; max-width: calc(100% - 6px); padding: 1px 4px; border: 1px solid var(--mask-40); border-radius: 3px; background: var(--mask-70); color: #fff; font-size: 9px; font-weight: 700; line-height: 13px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .platform-tencent { color: #1683ff; } .platform-bilibili { color: #00aeec; } .platform-migu { color: #e94b73; }
 .precache-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.45); }
 .precache-dialog { width: min(560px, 100%); max-height: 80vh; overflow: auto; padding: 20px; border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 16px 48px rgba(0,0,0,.25); }
 .precache-dialog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; } .precache-dialog-header button { color: var(--text-tertiary); }
 .precache-total { padding: 12px; margin-bottom: 10px; border-radius: 8px; background: var(--bg-primary-50); } .precache-items { display: grid; gap: 6px; }
 .precache-item { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-secondary); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .schedule-actions .precache-btn { display: none; }
+}
 
 .current-date {
   font-family: 'MiSans', sans-serif;

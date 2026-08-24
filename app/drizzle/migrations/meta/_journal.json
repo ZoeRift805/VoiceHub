@@ -292,8 +292,8 @@
     {
       "idx": 41,
       "version": "7",
-      "when": 1787574600000,
-      "tag": "20260824203000_add_admin_schedule_info",
+      "when": 1787586006558,
+      "tag": "20260824154006_admin_schedule_platform",
       "breakpoints": true
     }
   ]
