@@ -171,8 +171,6 @@ export default defineEventHandler(async (event) => {
         COALESCE(ac.collaborators, '[]'::jsonb) AS collaborators,
         COALESCE(rc.replay_count, 0) AS "replayRequestCount",
         COALESCE(rr.requesters, '[]'::jsonb) AS "replayRequesters",
-        (SELECT COUNT(*)::int FROM "Song" rs WHERE rs."requesterId" = s."requesterId") AS "requestCount",
-        (SELECT COUNT(*)::int FROM "Song" ps WHERE ps."requesterId" = s."requesterId" AND ps.played = true) AS "playedCount",
         COALESCE(
           (SELECT "hideStudentInfo" FROM "SystemSettings" LIMIT 1),
           true
@@ -195,6 +193,21 @@ export default defineEventHandler(async (event) => {
     `
 
     const rows = await client.unsafe(schedulesQuery, params)
+    const requesterStats = new Map<number, { requestCount: number; playedCount: number }>()
+    if (isAdmin && rows.length > 0) {
+      try {
+        const requesterIds = [...new Set(rows.map((row: any) => Number(row.requesterId)).filter((id) => Number.isInteger(id) && id > 0))]
+        if (requesterIds.length > 0) {
+          const statsRows = await client.unsafe(
+            `SELECT s."requesterId" AS "requesterId", COUNT(*)::int AS "requestCount", COUNT(*) FILTER (WHERE s."played" = true)::int AS "playedCount" FROM "Song" s WHERE s."requesterId" = ANY($1::int[]) GROUP BY s."requesterId"`,
+            [requesterIds]
+          )
+          statsRows.forEach((item: any) => requesterStats.set(Number(item.requesterId), { requestCount: Number(item.requestCount || 0), playedCount: Number(item.playedCount || 0) }))
+        }
+      } catch (statsError) {
+        console.warn('[Songs API] 获取管理员投稿统计失败，降级为空统计:', statsError)
+      }
+    }
     const shouldHideStudentInfo = rows[0]?.hideStudentInfo ?? true
 
     const formattedSchedules = rows.map((row: any) => {
@@ -295,8 +308,8 @@ export default defineEventHandler(async (event) => {
           requesterId: row.requesterId ? Number(row.requesterId) : null,
           replayRequestCount,
           replayRequesters,
-          requestCount: isAdmin ? Number(row.requestCount || 0) : null,
-          playedCount: isAdmin ? Number(row.playedCount || 0) : null,
+          requestCount: isAdmin ? requesterStats.get(Number(row.requesterId))?.requestCount ?? null : null,
+          playedCount: isAdmin ? requesterStats.get(Number(row.requesterId))?.playedCount ?? null : null,
           isReplay: linkedReplayRequestId !== null
         }
       }
