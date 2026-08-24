@@ -256,9 +256,7 @@ async function checkSchemaConsistency(sql) {
       'captchaEnabled',
       'captchaMaxFailures',
       'autoBackupEnabled',
-      'autoBackupConfig',
-      'showAdminSchedulePlatform',
-      'showAdminScheduleUserStats'
+      'autoBackupConfig'
     ],
     PasswordAuditLog: [
       'userId',
