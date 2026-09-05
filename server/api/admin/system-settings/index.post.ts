@@ -210,13 +210,14 @@ export default defineEventHandler(async (event) => {
       updateData.legalConsentDisplayMode = body.legalConsentDisplayMode
     }
     if (body.legalConsentUpdatedDate !== undefined) {
-      if (body.legalConsentUpdatedDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(body.legalConsentUpdatedDate)) throw createApiError(400, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, '条款更新日期格式无效')
-      updateData.legalConsentUpdatedDate = body.legalConsentUpdatedDate || null
+      const date = body.legalConsentUpdatedDate || null
+      if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw createApiError(400, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, '条款更新日期格式无效')
+      updateData.legalConsentUpdatedDate = date
     }
     if (body.legalConsentDocuments !== undefined) {
       let docs
       try { docs = typeof body.legalConsentDocuments === 'string' ? JSON.parse(body.legalConsentDocuments) : body.legalConsentDocuments } catch { docs = null }
-      if (!Array.isArray(docs) || !docs.length || docs.some((d) => !d || !d.name?.trim() || !d.content?.trim() || !/^[A-Za-z0-9_-]+$/.test(d.slug || '')) || new Set(docs.map((d) => d.slug)).size !== docs.length) throw createApiError(400, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, '协议文档配置无效')
+      if (!Array.isArray(docs) || (body.legalConsentEnabled && (!docs.length || docs.some((d) => !d || !d.name?.trim() || !d.content?.trim() || !/^[A-Za-z0-9_-]+$/.test(d.slug || '')) || new Set(docs.map((d) => d.slug)).size !== docs.length))) throw createApiError(400, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, '协议文档配置无效')
       updateData.legalConsentDocuments = JSON.stringify(docs)
     }
 
