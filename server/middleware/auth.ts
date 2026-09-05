@@ -304,9 +304,13 @@ export default defineEventHandler(async (event) => {
     }
 
     if (pathname !== '/api/legal-consent' && !isPublicApi && !isOAuthProviderRoute) {
-      const settings = await db.query.systemSettings.findFirst({ columns: { legalConsentEnabled: true, legalConsentUpdatedDate: true } })
-      if (settings?.legalConsentEnabled && settings.legalConsentUpdatedDate && user.legalConsentVersion !== settings.legalConsentUpdatedDate) {
-        return sendError(event, createApiError(403, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, '未同意最新条款前无法继续使用，请先确认条款', { legalConsentRequired: true }))
+      try {
+        const settings = await db.query.systemSettings.findFirst({ columns: { legalConsentEnabled: true, legalConsentUpdatedDate: true } })
+        if (settings?.legalConsentEnabled && settings.legalConsentUpdatedDate && user.legalConsentVersion !== settings.legalConsentUpdatedDate) {
+          return sendError(event, createApiError(403, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, '未同意最新条款前无法继续使用，请先确认条款', { legalConsentRequired: true }))
+        }
+      } catch (legalConsentError) {
+        console.warn('[Auth] 条款字段不可用，跳过条款版本检查，请先执行数据库迁移:', legalConsentError)
       }
     }
 

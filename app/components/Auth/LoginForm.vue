@@ -567,7 +567,7 @@ watch([showLoginTerms, legalConsentDisplayMode], ([enabled, mode]) => {
   if (!enabled) return
   try { loginTermsAccepted.value = localStorage.getItem(legalConsentStorageKey.value) === 'true' } catch { loginTermsAccepted.value = false }
   if (mode === 'modal' && !loginTermsAccepted.value) showLegalConsentModal.value = true
-}, { immediate: true })
+})
 watch(loginTermsAccepted, (accepted) => {
   if (accepted) {
     try { localStorage.setItem(legalConsentStorageKey.value, 'true') } catch {}
@@ -591,6 +591,12 @@ const tempToken2FA = ref('')
 const maskedEmail2FA = ref('')
 const showCreateMode = ref(false)
 const showRegisterMode = ref(false)
+
+onMounted(() => {
+  if (!showLoginTerms.value) return
+  try { loginTermsAccepted.value = localStorage.getItem(legalConsentStorageKey.value) === 'true' } catch { loginTermsAccepted.value = false }
+  if (legalConsentDisplayMode.value === 'modal' && !loginTermsAccepted.value) showLegalConsentModal.value = true
+})
 const remark = ref('')
 const email = ref('')
 const emailCode = ref('')
