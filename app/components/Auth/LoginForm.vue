@@ -560,24 +560,6 @@ const legalConsentStorageKey = computed(() => `voicehub.legalConsent.${legalCons
 const showLegalConsentModal = ref(false)
 const showLoginTerms = computed(() => !showRegisterMode.value && !isBindMode.value && legalConsentEnabled.value && legalConsentDocuments.value.length > 0)
 const loginTermsBlocked = computed(() => showLoginTerms.value && !loginTermsAccepted.value)
-const acceptLegalConsent = () => {
-  loginTermsAccepted.value = true
-  showLegalConsentModal.value = false
-  try { localStorage.setItem(legalConsentStorageKey.value, 'true') } catch {}
-}
-const rejectLegalConsent = () => { loginTermsAccepted.value = false; showLegalConsentModal.value = false; error.value = locale.value.legalConsentBlocked }
-watch([showLoginTerms, legalConsentDisplayMode], ([enabled, mode]) => {
-  if (!enabled) return
-  try { loginTermsAccepted.value = localStorage.getItem(legalConsentStorageKey.value) === 'true' } catch { loginTermsAccepted.value = false }
-  if (mode === 'modal' && !loginTermsAccepted.value) showLegalConsentModal.value = true
-})
-watch(loginTermsAccepted, (accepted) => {
-  if (accepted) {
-    try { localStorage.setItem(legalConsentStorageKey.value, 'true') } catch {}
-  }
-  if (!accepted && showLoginTerms.value) error.value = locale.value.legalConsentBlocked
-  if (accepted && error.value === locale.value.legalConsentBlocked) error.value = ''
-})
 const confirmPassword = ref('')
 const error = ref('')
 const loading = ref(false)
@@ -593,9 +575,22 @@ const methods2FA = ref([])
 const tempToken2FA = ref('')
 const maskedEmail2FA = ref('')
 onMounted(() => {
-  if (!showLoginTerms.value) return
-  try { loginTermsAccepted.value = localStorage.getItem(legalConsentStorageKey.value) === 'true' } catch { loginTermsAccepted.value = false }
-  if (legalConsentDisplayMode.value === 'modal' && !loginTermsAccepted.value) showLegalConsentModal.value = true
+  const syncLegalConsent = ([enabled, mode] = [showLoginTerms.value, legalConsentDisplayMode.value]) => {
+    if (!enabled) return
+    try { loginTermsAccepted.value = localStorage.getItem(legalConsentStorageKey.value) === 'true' } catch { loginTermsAccepted.value = false }
+    if (mode === 'modal' && !loginTermsAccepted.value) showLegalConsentModal.value = true
+  }
+  syncLegalConsent()
+  watch([showLoginTerms, legalConsentDisplayMode], ([enabled, mode]) => {
+    syncLegalConsent([enabled, mode])
+  })
+  watch(loginTermsAccepted, (accepted) => {
+    if (accepted) {
+      try { localStorage.setItem(legalConsentStorageKey.value, 'true') } catch {}
+    }
+    if (!accepted && showLoginTerms.value) error.value = locale.value.legalConsentBlocked
+    if (accepted && error.value === locale.value.legalConsentBlocked) error.value = ''
+  })
 })
 const remark = ref('')
 const email = ref('')
@@ -605,6 +600,16 @@ const codeCountdown = ref(0)
 const codeTimer = ref(null)
 const showBindConfirm = ref(false)
 const bindConfirmLoading = ref(false)
+const acceptLegalConsent = () => {
+  loginTermsAccepted.value = true
+  showLegalConsentModal.value = false
+  try { localStorage.setItem(legalConsentStorageKey.value, 'true') } catch {}
+}
+const rejectLegalConsent = () => {
+  loginTermsAccepted.value = false
+  showLegalConsentModal.value = false
+  error.value = locale.value.legalConsentBlocked
+}
 
 // 二次确认文案：将第三方账号与当前输入的账户绑定
 const bindConfirmMessage = computed(() => {
@@ -696,7 +701,18 @@ const redirectAfterLogin = async () => {
 }
 
 const handle2FASuccess = async () => {
+  await recordLegalConsent()
+  await auth.initAuth(true)
   await redirectAfterLogin()
+}
+
+const recordLegalConsent = async () => {
+  if (!showLoginTerms.value || !loginTermsAccepted.value) return
+  try {
+    await $fetch('/api/legal-consent', { method: 'POST' })
+  } catch (error) {
+    console.error('记录条款同意状态失败:', error)
+  }
 }
 
 onMounted(async () => {
@@ -848,6 +864,7 @@ const performLogin = async () => {
 
     // 登录成功，刷新认证状态
     await auth.initAuth(true)
+    await recordLegalConsent()
     await redirectAfterLogin()
     return 'success'
   } catch (err) {

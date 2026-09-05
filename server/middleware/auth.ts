@@ -303,7 +303,7 @@ export default defineEventHandler(async (event) => {
       ...passwordSetupState
     }
 
-    if (pathname !== '/api/legal-consent' && !isPublicApi && !isOAuthProviderRoute) {
+    if (!['/api/legal-consent', '/api/auth/verify'].includes(pathname) && !isPublicApi && !isOAuthProviderRoute) {
       try {
         const settings = await db.query.systemSettings.findFirst({ columns: { legalConsentEnabled: true, legalConsentUpdatedDate: true } })
         if (settings?.legalConsentEnabled && settings.legalConsentUpdatedDate && user.legalConsentVersion !== settings.legalConsentUpdatedDate) {
