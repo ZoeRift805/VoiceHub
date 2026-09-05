@@ -146,6 +146,7 @@ export default defineEventHandler(async (event) => {
         tokenVersion: users.tokenVersion,
         email: users.email,
         emailVerified: users.emailVerified
+        ,legalConsentVersion: users.legalConsentVersion
       })
       .from(users)
       .where(eq(users.id, decoded.userId))
@@ -297,8 +298,16 @@ export default defineEventHandler(async (event) => {
       sessionId: authSession?.id,
       email: user.email,
       emailVerified: user.emailVerified,
+      legalConsentVersion: user.legalConsentVersion,
       requirePasswordChange,
       ...passwordSetupState
+    }
+
+    if (pathname !== '/api/legal-consent' && !isPublicApi && !isOAuthProviderRoute) {
+      const settings = await db.query.systemSettings.findFirst({ columns: { legalConsentEnabled: true, legalConsentUpdatedDate: true } })
+      if (settings?.legalConsentEnabled && settings.legalConsentUpdatedDate && user.legalConsentVersion !== settings.legalConsentUpdatedDate) {
+        return sendError(event, createApiError(403, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, '未同意最新条款前无法继续使用，请先确认条款', { legalConsentRequired: true }))
+      }
     }
 
     // 认证完成前只允许维持登录态和完成改密所需的接口。

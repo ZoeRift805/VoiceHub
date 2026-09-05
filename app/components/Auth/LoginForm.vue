@@ -58,6 +58,7 @@
             :class="{ 'input-error': error }"
             :autocomplete="!isBindMode && !showCreateMode ? 'username webauthn' : 'username'"
             :placeholder="showCreateMode ? locale.usernamePattern : locale.usernamePlaceholder"
+            :disabled="loginTermsBlocked"
             required
             type="text"
             @input="error = ''"
@@ -87,6 +88,7 @@
             v-model="name"
             :class="{ 'input-error': error }"
             :placeholder="locale.realNamePlaceholder"
+            :disabled="loginTermsBlocked"
             required
             type="text"
             @input="error = ''"
@@ -347,6 +349,19 @@
         />
       </div>
 
+      <label v-if="showLoginTerms && legalConsentDisplayMode === 'checkbox'" class="login-terms-check">
+        <input v-model="loginTermsAccepted" type="checkbox">
+        <span>{{ locale.legalConsentPrefix }}</span>
+        <template v-for="(doc, index) in legalConsentDocuments" :key="doc.slug">
+          <a :href="`/legal/${doc.slug}`" target="_blank" rel="noopener noreferrer">{{ doc.name }}</a><span v-if="index < legalConsentDocuments.length - 1">{{ locale.legalConsentSeparator }}</span>
+        </template>
+      </label>
+
+      <div v-if="loginTermsBlocked && legalConsentDisplayMode === 'modal'" class="login-terms-blocked">
+        <span>{{ locale.legalConsentBlocked }}</span>
+        <button type="button" @click="showLegalConsentModal = true">{{ locale.legalConsentView }}</button>
+      </div>
+
       <div v-if="error" class="error-container">
         <svg
           class="error-icon"
@@ -409,13 +424,13 @@
       </div>
     </form>
 
-    <AuthOAuthQuickLogin v-if="!isBindMode && !showRegisterMode" />
+    <AuthOAuthQuickLogin v-if="!isBindMode && !showRegisterMode && (!showLoginTerms || loginTermsAccepted)" />
 
     <div v-if="!isBindMode && !showRegisterMode && isWebAuthnSupported" class="webauthn-section">
       <div class="divider">
         <span>{{ locale.or }}</span>
       </div>
-      <button type="button" class="webauthn-btn" :disabled="loading" @click="handleWebAuthnLogin">
+      <button v-if="!showLoginTerms || loginTermsAccepted" type="button" class="webauthn-btn" :disabled="loading" @click="handleWebAuthnLogin">
         <Fingerprint :size="20" class="webauthn-icon" />
         <span>{{ locale.webauthn }}</span>
       </button>
@@ -448,6 +463,22 @@
       @confirm="handleBindConfirm"
       @cancel="showBindConfirm = false"
     />
+
+    <Teleport to="body">
+      <div v-if="showLegalConsentModal" class="legal-consent-overlay">
+        <div class="legal-consent-modal">
+          <h3>{{ locale.legalConsentModalTitle }}</h3>
+          <p>{{ locale.legalConsentModalDesc }}</p>
+          <div class="legal-consent-docs">
+            <a v-for="doc in legalConsentDocuments" :key="doc.slug" :href="`/legal/${doc.slug}`" target="_blank" rel="noopener noreferrer">{{ doc.name }}</a>
+          </div>
+          <div class="legal-consent-actions">
+            <button type="button" class="legal-consent-reject" @click="rejectLegalConsent">{{ locale.legalConsentReject }}</button>
+            <button type="button" class="legal-consent-accept" @click="acceptLegalConsent">{{ locale.legalConsentAccept }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -477,7 +508,7 @@ import ConfirmDialog from '~/components/UI/ConfirmDialog.vue'
 import { useLocale } from '~/utils/locale'
 import { useOAuthBindReminder } from '~/composables/useOAuthBindReminder'
 
-const { allowOAuthRegistration, allowRegister, fetchSiteConfig, smtpEnabled, captchaEnabled, captchaProvider, registerEmailRequired, registerRequiresGradeClass } = useSiteConfig()
+const { allowOAuthRegistration, allowRegister, fetchSiteConfig, smtpEnabled, captchaEnabled, captchaProvider, registerEmailRequired, registerRequiresGradeClass, legalConsentEnabled, legalConsentDisplayMode, legalConsentUpdatedDate, legalConsentDocuments } = useSiteConfig()
 const { auth: authLocale, serverErrors } = useLocale()
 const locale = computed(() => authLocale.value?.loginForm || {})
 const { localize: localizeServerError } = useServerErrors()
@@ -521,6 +552,29 @@ const name = ref('')
 const grade = ref('')
 const studentClass = ref('')
 const password = ref('')
+const loginTermsAccepted = ref(false)
+const legalConsentStorageKey = computed(() => `voicehub.legalConsent.${legalConsentUpdatedDate.value || 'unversioned'}`)
+const showLegalConsentModal = ref(false)
+const showLoginTerms = computed(() => !showRegisterMode.value && !isBindMode.value && legalConsentEnabled.value && legalConsentDocuments.value.length > 0)
+const loginTermsBlocked = computed(() => showLoginTerms.value && !loginTermsAccepted.value)
+const acceptLegalConsent = () => {
+  loginTermsAccepted.value = true
+  showLegalConsentModal.value = false
+  try { localStorage.setItem(legalConsentStorageKey.value, 'true') } catch {}
+}
+const rejectLegalConsent = () => { loginTermsAccepted.value = false; showLegalConsentModal.value = false; error.value = locale.value.legalConsentBlocked }
+watch([showLoginTerms, legalConsentDisplayMode], ([enabled, mode]) => {
+  if (!enabled) return
+  try { loginTermsAccepted.value = localStorage.getItem(legalConsentStorageKey.value) === 'true' } catch { loginTermsAccepted.value = false }
+  if (mode === 'modal' && !loginTermsAccepted.value) showLegalConsentModal.value = true
+}, { immediate: true })
+watch(loginTermsAccepted, (accepted) => {
+  if (accepted) {
+    try { localStorage.setItem(legalConsentStorageKey.value, 'true') } catch {}
+  }
+  if (!accepted && showLoginTerms.value) error.value = locale.value.legalConsentBlocked
+  if (accepted && error.value === locale.value.legalConsentBlocked) error.value = ''
+})
 const confirmPassword = ref('')
 const error = ref('')
 const loading = ref(false)
@@ -696,6 +750,10 @@ const switchToLogin = () => {
 }
 
 const handleLogin = async () => {
+  if (loginTermsBlocked.value) {
+    error.value = locale.value.legalConsentBlocked
+    return
+  }
   if (!username.value || !password.value) {
     error.value = locale.value.fullLoginInfo
     return
@@ -1253,6 +1311,45 @@ const handleWebAuthnLogin = async () => {
 .input-wrapper input:hover {
   filter: brightness(1.03);
 }
+
+.input-wrapper input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--bg-secondary);
+}
+
+.login-terms-check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.login-terms-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.login-terms-check a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.login-terms-blocked { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--border-secondary); border-radius: 10px; background: var(--bg-secondary); color: var(--text-tertiary); font-size: 12px; }
+.login-terms-blocked button { color: var(--primary); font-weight: 700; white-space: nowrap; }
+.legal-consent-overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.6); backdrop-filter: blur(6px); }
+.legal-consent-modal { width: min(600px, 100%); max-height: 90vh; overflow: auto; padding: 28px; border: 1px solid var(--border-secondary); border-radius: 18px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.legal-consent-modal h3 { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+.legal-consent-modal p { color: var(--text-tertiary); font-size: 13px; line-height: 1.7; }
+.legal-consent-docs { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin: 20px 0; }
+.legal-consent-docs a { padding: 14px; border: 1px solid var(--border-secondary); border-radius: 10px; color: var(--text-primary); font-weight: 700; }
+.legal-consent-actions { display: flex; gap: 12px; }
+.legal-consent-actions button { flex: 1; padding: 12px; border-radius: 10px; font-weight: 800; }
+.legal-consent-reject { background: var(--bg-tertiary); color: var(--text-secondary); }
+.legal-consent-accept { background: var(--primary); color: white; }
 
 .class-row {
   display: grid;

@@ -786,6 +786,32 @@
         />
       </section>
 
+      <!-- 登录条款确认 -->
+      <section class="lg:col-span-2 bg-bg-secondary-40 border border-border-secondary rounded-2xl p-6 space-y-5">
+        <div class="flex items-center justify-between border-b border-border-secondary pb-4">
+          <div>
+            <h3 class="text-sm font-black text-text-primary flex items-center gap-2"><FileText :size="16" class="text-primary" /> {{ locale.legalConsentTitle }}</h3>
+            <p class="text-[10px] text-text-tertiary mt-1">{{ locale.legalConsentDesc }}</p>
+          </div>
+          <input v-model="formData.legalConsentEnabled" type="checkbox" class="w-5 h-5 rounded border-border-secondary bg-bg-secondary cursor-pointer">
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label :class="labelClass">{{ locale.legalConsentDisplayMode }}</label>
+            <div class="flex gap-2 mt-2">
+              <button v-for="mode in ['modal', 'checkbox']" :key="mode" type="button" :class="['flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-all', formData.legalConsentDisplayMode === mode ? 'bg-primary text-white border-primary' : 'border-border-secondary text-text-tertiary']" @click="formData.legalConsentDisplayMode = mode">{{ mode === 'modal' ? locale.legalConsentModal : locale.legalConsentCheckbox }}</button>
+            </div>
+          </div>
+          <div><label :class="labelClass">{{ locale.legalConsentUpdatedDate }}</label><input v-model="formData.legalConsentUpdatedDate" type="date" :class="inputClass" class="mt-2"></div>
+        </div>
+        <div class="flex items-center justify-between"><h4 class="text-xs font-bold text-text-primary">{{ locale.legalConsentDocuments }}</h4><button type="button" class="px-3 py-2 rounded-lg bg-primary text-white text-xs font-bold" @click="formData.legalConsentDocuments.push({ name: '', slug: '', content: '' })">+ {{ locale.legalConsentAdd }}</button></div>
+        <div v-for="(doc, index) in formData.legalConsentDocuments" :key="index" class="border border-border-secondary rounded-xl p-4 space-y-3 bg-bg-primary">
+          <div class="flex justify-between items-center"><span class="text-xs font-bold text-text-primary">{{ locale.legalConsentDocument }} {{ index + 1 }}</span><button type="button" class="text-error text-xs" @click="removeLegalDocument(index)">{{ locale.delete }}</button></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3"><input v-model="doc.name" :placeholder="locale.legalConsentName" :class="inputClass"><div class="flex"><span class="px-3 py-2 bg-bg-secondary border border-border-secondary rounded-l-lg text-xs text-text-tertiary">/legal/</span><input v-model="doc.slug" :placeholder="locale.legalConsentSlug" :class="[inputClass, 'rounded-l-none']"></div></div>
+          <textarea v-model="doc.content" :placeholder="locale.legalConsentContent" :rows="6" :class="[inputClass, 'font-mono text-xs resize-y']" />
+        </div>
+      </section>
+
       <!-- OAuth 第三方登录配置 -->
       <OAuthConfigManager v-model="formData" class="lg:col-span-2" />
     </div>
@@ -900,6 +926,14 @@ const cardClass = 'bg-bg-secondary-40 border border-border-secondary rounded-2xl
 
 const defaultSubmissionGuidelines = computed(() => locale.value?.defaultSubmissionGuidelines || '请遵守校园广播站投稿规范。')
 
+const removeLegalDocument = (index) => {
+  if (formData.value.legalConsentDocuments.length <= 1) {
+    showNotification(locale.value?.legalConsentKeepOne || '至少保留一份协议文档', 'error')
+    return
+  }
+  formData.value.legalConsentDocuments.splice(index, 1)
+}
+
 const formData = ref({
   siteTitle: '',
   siteLogoUrl: '',
@@ -912,6 +946,10 @@ const formData = ref({
   gonganNumber: '',
   statisticsCode: '',
   statisticsCodeEnabled: false,
+  legalConsentEnabled: false,
+  legalConsentDisplayMode: 'modal',
+  legalConsentUpdatedDate: '',
+  legalConsentDocuments: [{ name: '', slug: '', content: '' }],
   showBeianIcon: false,
   enableCollaborativeSubmission: true,
   enableSubmissionRemarks: false,
@@ -1052,6 +1090,10 @@ const loadConfig = async () => {
       gonganNumber: data.gonganNumber || '',
       statisticsCode: data.statisticsCode || '',
       statisticsCodeEnabled: !!data.statisticsCodeEnabled,
+      legalConsentEnabled: !!data.legalConsentEnabled,
+      legalConsentDisplayMode: ['modal', 'checkbox'].includes(data.legalConsentDisplayMode) ? data.legalConsentDisplayMode : 'modal',
+      legalConsentUpdatedDate: data.legalConsentUpdatedDate || '',
+      legalConsentDocuments: parseJsonArray(data.legalConsentDocuments, [{ name: '', slug: '', content: '' }]),
       showBeianIcon: !!data.showBeianIcon,
       enableCollaborativeSubmission: data.enableCollaborativeSubmission !== false,
       enableSubmissionRemarks: !!data.enableSubmissionRemarks,
@@ -1149,6 +1191,7 @@ const saveConfig = async () => {
       : ''
     const configToSave = {
       ...formData.value,
+      legalConsentDocuments: JSON.stringify(formData.value.legalConsentDocuments),
       schoolLogoHomeUrl: joinThemeLogoUrl(
         schoolLogoHomeDarkUrl,
         schoolLogoHomeLightUrl
