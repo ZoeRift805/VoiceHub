@@ -303,17 +303,6 @@ export default defineEventHandler(async (event) => {
       ...passwordSetupState
     }
 
-    if (!['/api/legal-consent', '/api/auth/verify'].includes(pathname) && !isPublicApi && !isOAuthProviderRoute) {
-      try {
-        const settings = await db.query.systemSettings.findFirst({ columns: { legalConsentEnabled: true, legalConsentUpdatedDate: true } })
-        if (settings?.legalConsentEnabled && settings.legalConsentUpdatedDate && user.legalConsentVersion !== settings.legalConsentUpdatedDate) {
-          return sendError(event, createApiError(403, SERVER_ERROR_CODES.COMMON_INVALID_PARAMS, '未同意最新条款前无法继续使用，请先确认条款', { legalConsentRequired: true }))
-        }
-      } catch (legalConsentError) {
-        console.warn('[Auth] 条款字段不可用，跳过条款版本检查，请先执行数据库迁移:', legalConsentError)
-      }
-    }
-
     // 认证完成前只允许维持登录态和完成改密所需的接口。
     if (shouldBlockDuringPasswordChange(pathname, method, requirePasswordChange)) {
       return sendError(
