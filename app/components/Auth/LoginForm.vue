@@ -514,6 +514,9 @@ const locale = computed(() => authLocale.value?.loginForm || {})
 const { localize: localizeServerError } = useServerErrors()
 const { success: toastSuccess } = useToast()
 
+const showCreateMode = ref(false)
+const showRegisterMode = ref(false)
+
 const route = useRoute()
 const router = useRouter()
 const isBindMode = computed(() => route.query.action === 'bind')
@@ -589,9 +592,6 @@ const userId2FA = ref(0)
 const methods2FA = ref([])
 const tempToken2FA = ref('')
 const maskedEmail2FA = ref('')
-const showCreateMode = ref(false)
-const showRegisterMode = ref(false)
-
 onMounted(() => {
   if (!showLoginTerms.value) return
   try { loginTermsAccepted.value = localStorage.getItem(legalConsentStorageKey.value) === 'true' } catch { loginTermsAccepted.value = false }
