@@ -24,6 +24,23 @@ const state = {
   ssrPrewarm: { attempts: 0, successes: 0, failures: 0, lastDurationMs: null as number | null, lastResult: null as string | null }
 }
 
+let musicSourceProbeRunner: ((force?: boolean) => Promise<void> | void) | null = null
+let observedDeploymentTarget: 'edgeone' | null = null
+
+export const setMusicSourceProbeRunner = (runner: ((force?: boolean) => Promise<void> | void) | null) => {
+  musicSourceProbeRunner = runner
+}
+
+export const triggerMusicSourceProbe = (force = false) => musicSourceProbeRunner?.(force)
+
+export const observeRuntimeDeployment = (headers: Record<string, string | string[] | undefined> = {}) => {
+  const hasEdgeOneHeader = Object.entries(headers).some(([name, value]) => {
+    const normalizedName = name.toLowerCase()
+    return Boolean(value) && (normalizedName.startsWith('eo-') || normalizedName.startsWith('x-edgeone-'))
+  })
+  if (hasEdgeOneHeader) observedDeploymentTarget = 'edgeone'
+}
+
 const gcObserver = new PerformanceObserver((list) => {
   for (const entry of list.getEntries()) {
     state.gc.count += 1
