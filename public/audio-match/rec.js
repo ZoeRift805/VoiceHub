@@ -9,6 +9,7 @@ class TimedRecorder extends AudioWorkletProcessor {
     this.port.onmessage = (event) => {
       switch (event.data.message) {
         case 'start':
+          this.recordingId = event.data.recordingId
           this.max_length = Math.round(event.data.duration * sampleRate)
           this.recbuffer = new Float32Array(this.max_length)
           this.buf_index = 0
@@ -30,6 +31,7 @@ class TimedRecorder extends AudioWorkletProcessor {
       this.buf_index += length
       this.port.postMessage({
         message: 'bufferhealth',
+        recordingId: this.recordingId,
         health: this.buf_index / this.max_length
       })
       if (this.buf_index >= this.max_length) {
@@ -37,6 +39,7 @@ class TimedRecorder extends AudioWorkletProcessor {
         this.buf_index = 0
         this.port.postMessage({
           message: 'finished',
+          recordingId: this.recordingId,
           recording: this.recbuffer
         })
       }

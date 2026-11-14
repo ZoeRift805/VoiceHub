@@ -1613,6 +1613,20 @@ let audioMatchMicStream = null
 let audioMatchMicSourceNode = null
 let audioMatchSilentNode = null
 let audioMatchSessionId = 0
+let audioMatchRecordingId = 0
+let audioMatchRecordingTimer = null
+let audioMatchRequest = null
+
+const waitForAudioMatch = async (promise, message, timeout = 15000) => {
+  let timer
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeout)
+    })])
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 // 音源管理器
 const musicSources = useMusicSources()
@@ -1661,6 +1675,10 @@ const resetAudioMatchState = () => {
 
 const stopAudioMatchSession = async () => {
   audioMatchSessionId++
+  audioMatchRecordingId++
+  clearTimeout(audioMatchRecordingTimer)
+  audioMatchRequest?.abort()
+  audioMatchRequest = null
   audioMatchPreparing.value = false
   audioMatchRecording.value = false
   audioMatchProcessing.value = false
@@ -1682,28 +1700,34 @@ const stopAudioMatchSession = async () => {
   audioMatchContext = null
   if (context) {
     try {
-      await context.close()
+      await waitForAudioMatch(context.close(), locale.value.audioMatchInitFailed)
     } catch {
       // 上下文可能已由浏览器关闭
     }
   }
 }
 
-const loadAudioMatchScript = (src) =>
-  new Promise((resolve, reject) => {
-    if (document.querySelector(`script[data-audio-match="${src}"]`)) {
-      resolve()
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = src
-    script.async = true
-    script.dataset.audioMatch = src
-    script.onload = () => resolve()
+const loadAudioMatchScript = (src) => {
+  const existing = document.querySelector('script[data-audio-match="' + src + '"]')
+  if (existing?.audioMatchPromise) return existing.audioMatchPromise
+  existing?.remove()
+  const script = document.createElement('script')
+  script.src = src
+  script.async = true
+  script.dataset.audioMatch = src
+  script.audioMatchPromise = waitForAudioMatch(new Promise((resolve, reject) => {
+    script.onload = resolve
     script.onerror = () => reject(new Error(callLocale('audioMatchScriptLoadFailed', '', src)))
-    document.head.appendChild(script)
+  }), locale.value.audioMatchInitFailed).catch((err) => {
+    script.remove()
+    throw err
+  }).finally(() => {
+    script.onload = null
+    script.onerror = null
   })
+  document.head.appendChild(script)
+  return script.audioMatchPromise
+}
 
 const ensureAudioMatchScripts = async () => {
   if (!import.meta.client) return
@@ -1755,8 +1779,12 @@ const parseAudioMatchResults = (response) => {
   })
 }
 
-const handleAudioMatchFingerprint = async (recording) => {
+const handleAudioMatchFingerprint = async (recording, recordingId = audioMatchRecordingId) => {
   const sessionId = audioMatchSessionId
+  if (!audioMatchContext || recordingId !== audioMatchRecordingId) return
+  clearTimeout(audioMatchRecordingTimer)
+  const request = new AbortController()
+  audioMatchRequest = request
   const sampleRate = audioMatchContext.sampleRate
   try {
     audioMatchProcessing.value = true
@@ -1777,21 +1805,24 @@ const handleAudioMatchFingerprint = async (recording) => {
       source.buffer = buffer
       source.connect(offlineContext.destination)
       source.start()
-      pcm = (await offlineContext.startRendering()).getChannelData(0)
+      pcm = (await waitForAudioMatch(offlineContext.startRendering(), locale.value.audioMatchFailed)).getChannelData(0)
     }
 
-    if (sessionId !== audioMatchSessionId) return
-    const fingerprint = await window.GenerateFP(pcm)
-    if (sessionId !== audioMatchSessionId) return
-    const response = await $fetch('/api/api-enhanced/netease/audio/match', {
+    if (sessionId !== audioMatchSessionId || recordingId !== audioMatchRecordingId) return
+    const fingerprint = await waitForAudioMatch(window.GenerateFP(pcm), locale.value.audioMatchFailed)
+    if (sessionId !== audioMatchSessionId || recordingId !== audioMatchRecordingId) return
+    const response = await waitForAudioMatch($fetch('/api/api-enhanced/netease/audio/match', {
       method: 'POST',
+      signal: request.signal,
+      timeout: 20000,
+      retry: 0,
       body: {
         duration: AUDIO_MATCH_DURATION,
         audioFP: fingerprint
       }
-    })
+    }), locale.value.audioMatchFailed, 20000)
 
-    if (sessionId !== audioMatchSessionId) return
+    if (sessionId !== audioMatchSessionId || recordingId !== audioMatchRecordingId) return
     const matches = parseAudioMatchResults(response)
     if (!matches.length) {
       audioMatchError.value = locale.value.audioMatchNoMatch
@@ -1802,13 +1833,15 @@ const handleAudioMatchFingerprint = async (recording) => {
     audioMatchResults.value = matches
     audioMatchStatus.value = callLocale('audioMatchDone', '', matches.length)
   } catch (err) {
-    if (sessionId !== audioMatchSessionId) return
+    if (sessionId !== audioMatchSessionId || recordingId !== audioMatchRecordingId) return
     console.error('听歌识曲失败:', err)
     audioMatchError.value = localizeServerError(err, locale.value.audioMatchFailed)
     audioMatchStatus.value = ''
     audioMatchResults.value = []
   } finally {
-    if (sessionId === audioMatchSessionId) audioMatchProcessing.value = false
+    request.abort()
+    if (audioMatchRequest === request) audioMatchRequest = null
+    if (sessionId === audioMatchSessionId && recordingId === audioMatchRecordingId) audioMatchProcessing.value = false
   }
 }
 
@@ -1848,6 +1881,14 @@ const initializeAudioMatch = async () => {
             return
           }
           audioMatchMicStream = stream
+          for (const track of stream.getTracks()) {
+            track.addEventListener?.('ended', () => {
+              if (sessionId !== audioMatchSessionId) return
+              stopAudioMatchSession()
+              audioMatchStatus.value = ''
+              audioMatchError.value = locale.value.microphoneNotFound
+            }, { once: true })
+          }
           resolve(stream)
         }, reject)
     })
@@ -1857,7 +1898,7 @@ const initializeAudioMatch = async () => {
       (async () => {
         const context = new AudioContextClass()
         audioMatchContext = context
-        if (context.state === 'suspended') await context.resume()
+        if (context.state === 'suspended') await waitForAudioMatch(context.resume(), locale.value.audioMatchInitFailed)
         return context
       })(),
       ensureAudioMatchScripts(),
@@ -1866,12 +1907,19 @@ const initializeAudioMatch = async () => {
     if (sessionId !== audioMatchSessionId) return
 
     if (context.audioWorklet) {
-      await context.audioWorklet.addModule('/audio-match/rec.js')
-      if (sessionId !== audioMatchSessionId) return
-      audioMatchRecorderNode = new AudioWorkletNode(context, 'timed-recorder')
+      try {
+        await waitForAudioMatch(context.audioWorklet.addModule('/audio-match/rec.js'), locale.value.audioMatchInitFailed)
+        if (sessionId !== audioMatchSessionId) return
+        audioMatchRecorderNode = new AudioWorkletNode(context, 'timed-recorder')
+      } catch (err) {
+        if (sessionId !== audioMatchSessionId) return
+        if (!context.createScriptProcessor) throw err
+      }
+    }
+    if (audioMatchRecorderNode) {
 
       audioMatchRecorderNode.port.onmessage = async (event) => {
-        if (sessionId !== audioMatchSessionId) return
+        if (sessionId !== audioMatchSessionId || event.data.recordingId !== audioMatchRecordingId || !audioMatchRecording.value) return
         switch (event.data.message) {
           case 'bufferhealth': {
             const progress = Math.min(1, Number(event.data.health) || 0)
@@ -1886,7 +1934,7 @@ const initializeAudioMatch = async () => {
           }
           case 'finished':
             audioMatchRecording.value = false
-            await handleAudioMatchFingerprint(event.data.recording)
+            await handleAudioMatchFingerprint(event.data.recording, event.data.recordingId)
             break
           default:
             break
@@ -1901,9 +1949,10 @@ const initializeAudioMatch = async () => {
       let recbuffer = new Float32Array()
       let recording = false
       let bufIndex = 0
+      let recordingId = 0
 
       scriptNode.onaudioprocess = (e) => {
-        if (!recording || sessionId !== audioMatchSessionId) return
+        if (!recording || sessionId !== audioMatchSessionId || recordingId !== audioMatchRecordingId) return
 
         const channelL = e.inputBuffer.getChannelData(0)
         const progress = bufIndex / maxLength
@@ -1930,7 +1979,7 @@ const initializeAudioMatch = async () => {
           }
 
           bufIndex = 0
-          handleAudioMatchFingerprint(recbuffer)
+          handleAudioMatchFingerprint(recbuffer, recordingId)
         } else {
           recbuffer.set(channelL, bufIndex)
           bufIndex += channelL.length
@@ -1942,6 +1991,7 @@ const initializeAudioMatch = async () => {
       audioMatchRecorderNode.port = {
         postMessage: (msg) => {
           if (msg.message === 'start') {
+            recordingId = msg.recordingId
             maxLength = Math.round(msg.duration * context.sampleRate)
             recbuffer = new Float32Array(maxLength)
             bufIndex = 0
@@ -2054,10 +2104,15 @@ const startAudioMatchRecording = async () => {
   if (!context || !audioMatchRecorderNode || !showAudioMatchModal.value) return
   if (context.state === 'suspended') {
     try {
-      await context.resume()
+      audioMatchPreparing.value = true
+      await waitForAudioMatch(context.resume(), locale.value.audioMatchInitFailed)
     } catch (err) {
+      if (context !== audioMatchContext) return
+      audioMatchStatus.value = ''
       audioMatchError.value = getAudioMatchErrorMessage(err)
       return
+    } finally {
+      if (context === audioMatchContext) audioMatchPreparing.value = false
     }
   }
   if (context !== audioMatchContext) return
@@ -2071,11 +2126,20 @@ const startAudioMatchRecording = async () => {
   audioMatchRecording.value = true
   audioMatchRecorderNode.port.postMessage({
     message: 'start',
+    recordingId: ++audioMatchRecordingId,
     duration: AUDIO_MATCH_DURATION
   })
+  audioMatchRecordingTimer = setTimeout(() => {
+    if (context !== audioMatchContext || !audioMatchRecording.value) return
+    stopAudioMatchRecording()
+    audioMatchStatus.value = ''
+    audioMatchError.value = locale.value.microphoneBusy
+  }, (AUDIO_MATCH_DURATION + 5) * 1000)
 }
 
 const stopAudioMatchRecording = () => {
+  audioMatchRecordingId++
+  clearTimeout(audioMatchRecordingTimer)
   if (audioMatchRecorderNode?.port) {
     audioMatchRecorderNode.port.postMessage({ message: 'stop' })
   }

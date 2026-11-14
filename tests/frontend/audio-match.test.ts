@@ -140,6 +140,7 @@ const createHarness = (options: HarnessOptions = {}) => {
       port = { postMessage() {} }
     },
     Float32Array,
+    AbortController,
     ref: (value: unknown) => ({ value }),
     locale: { value: options.locale || zhSongs.requestForm },
     callLocale: (key: keyof typeof zhSongs.requestForm, _fallback: string, ...args: unknown[]) => {
@@ -163,7 +164,7 @@ const createHarness = (options: HarnessOptions = {}) => {
     `${state}\n${actions.replaceAll('import.meta.client', 'true')}\n({
     openAudioMatchModal, closeAudioMatchModal, startAudioMatchRecording, stopAudioMatchRecording,
     handleAudioMatchFingerprint, audioMatchPreparing, audioMatchRecording, audioMatchError, audioMatchStatus,
-    audioMatchResults, getContext: () => audioMatchContext, getRecorder: () => audioMatchRecorderNode
+    audioMatchResults, audioMatchProcessing, loadAudioMatchScript, getRecordingId: () => audioMatchRecordingId, getContext: () => audioMatchContext, getRecorder: () => audioMatchRecorderNode
   })`,
     sandbox
   )
@@ -317,20 +318,15 @@ test('失败会话清理完成后不向重新打开的弹窗写入旧错误', as
   assert.equal(api.audioMatchStatus.value, zhSongs.requestForm.microphoneReady)
 })
 
-test('录音模块初始化失败时释放麦克风并允许重试', async () => {
+test('录音模块加载失败时降级到兼容录音器', async () => {
   const module = deferred()
-  const options: HarnessOptions = { module }
-  const { api, calls } = createHarness(options)
+  const { api, calls } = createHarness({ module })
   const opening = api.openAudioMatchModal()
   module.reject(new Error('录音模块加载失败'))
   await opening
-  assert.equal(calls.stopped, 1)
-  assert.equal(api.getContext(), null)
-  assert.equal(api.audioMatchPreparing.value, false)
-  assert.equal(api.audioMatchStatus.value, '')
-  options.module = undefined
+  assert.equal(calls.stopped, 0)
+  assert.equal(typeof api.getRecorder().onaudioprocess, 'function')
   await api.startAudioMatchRecording()
-  assert.equal(calls.microphone, 2)
   assert.equal(api.audioMatchRecording.value, true)
 })
 
@@ -444,4 +440,154 @@ test('修改后的 Vue 脚本和模板均可编译，中英文词典键一致', 
     []
   )
   assert.deepEqual(Object.keys(zhSongs.requestForm).sort(), Object.keys(enSongs.requestForm).sort())
+})
+
+test('停止后重录忽略上一轮排队的 Worklet 消息', async () => {
+  const { api, calls } = createHarness()
+  await api.openAudioMatchModal()
+  await api.startAudioMatchRecording()
+  const oldId = api.getRecordingId()
+  api.stopAudioMatchRecording()
+  await api.startAudioMatchRecording()
+  await api.getRecorder().port.onmessage({ data: { message: 'finished', recordingId: oldId, recording: new Float32Array(144000) } })
+  assert.equal(calls.requests.length, 0)
+  assert.equal(api.audioMatchRecording.value, true)
+  await api.getRecorder().port.onmessage({ data: { message: 'finished', recordingId: api.getRecordingId(), recording: new Float32Array(144000) } })
+  assert.equal(calls.requests.length, 1)
+})
+
+test('旧 resume 拒绝不污染重新打开的会话', async () => {
+  const { api } = createHarness()
+  await api.openAudioMatchModal()
+  const pending = deferred()
+  const context = api.getContext()
+  context.state = 'suspended'
+  context.resume = () => pending.promise
+  const starting = api.startAudioMatchRecording()
+  await api.closeAudioMatchModal()
+  await api.openAudioMatchModal()
+  pending.reject(new Error('旧上下文错误'))
+  await starting
+  assert.equal(api.audioMatchError.value, '')
+  assert.equal(api.audioMatchStatus.value, zhSongs.requestForm.microphoneReady)
+})
+
+test('resume 等待期间重复点击只开始一轮录音', async () => {
+  const { api } = createHarness()
+  await api.openAudioMatchModal()
+  const pending = deferred()
+  const context = api.getContext()
+  let resumes = 0
+  context.state = 'suspended'
+  context.resume = () => { resumes++; return pending.promise }
+  const starting = api.startAudioMatchRecording()
+  await api.startAudioMatchRecording()
+  assert.equal(resumes, 1)
+  pending.resolve()
+  await starting
+  assert.equal(api.audioMatchRecording.value, true)
+})
+
+test('无采样输入时退出录音并显示错误', async () => {
+  const { api, timers } = createHarness()
+  await api.openAudioMatchModal()
+  await api.startAudioMatchRecording()
+  timers.values().next().value!()
+  assert.equal(api.audioMatchRecording.value, false)
+  assert.equal(api.audioMatchStatus.value, '')
+  assert.equal(api.audioMatchError.value, zhSongs.requestForm.microphoneBusy)
+})
+
+test('关闭弹窗取消在途识别请求', async () => {
+  const response = deferred<unknown>()
+  const { api, calls } = createHarness({ response })
+  await api.openAudioMatchModal()
+  const matching = api.handleAudioMatchFingerprint(new Float32Array(144000))
+  await new Promise(setImmediate)
+  const options = calls.requests[0][1] as { signal?: AbortSignal; timeout?: number; retry?: number }
+  assert.equal(options.timeout, 20000)
+  assert.equal(options.retry, 0)
+  await api.closeAudioMatchModal()
+  assert.equal(options.signal?.aborted, true)
+  response.resolve({ result: [] })
+  await matching
+})
+
+test('脚本并发等待同一次加载，失败后重新插入脚本', async () => {
+  const { api, sandbox } = createHarness()
+  const scripts: { dataset: Record<string, string>; remove(): void; onerror?: () => void; onload?: () => void }[] = []
+  Object.assign(sandbox, { document: {
+    querySelector: () => scripts[0],
+    createElement: () => ({ dataset: {}, remove() { scripts.splice(scripts.indexOf(this), 1) } }),
+    head: { appendChild: (script: typeof scripts[number]) => scripts.push(script) }
+  } })
+  const first = api.loadAudioMatchScript('/test.js')
+  const second = api.loadAudioMatchScript('/test.js')
+  assert.equal(first, second)
+  scripts[0].onerror!()
+  await assert.rejects(first)
+  assert.equal(scripts.length, 0)
+  const retry = api.loadAudioMatchScript('/test.js')
+  scripts[0].onload!()
+  await retry
+  assert.equal(scripts.length, 1)
+})
+
+test('真实 WASM 可初始化并连续生成指纹', async () => {
+  const runtime = readFileSync(new URL('../../public/audio-match/afp.js', import.meta.url), 'utf8')
+  const binary = readFileSync(new URL('../../public/audio-match/afp.wasm.js', import.meta.url), 'utf8')
+  const result = await runInNewContext(`${binary}\n${runtime}\n(async () => {
+    const pcm = new Float32Array(24000)
+    for (let i = 0; i < pcm.length; i++) pcm[i] = Math.sin(i * 0.3)
+    return [await GenerateFP(pcm), await GenerateFP(pcm)]
+  })()`, { setTimeout, clearTimeout, console: { info() {}, log() {}, warn() {}, error() {} }, atob, btoa })
+  assert.equal(typeof result[0], 'string')
+  assert.ok(result[0].length > 0)
+  assert.equal(result[0], result[1])
+})
+
+test('WASM 初始化失败后清空缓存并允许重试', async () => {
+  const runtime = readFileSync(new URL('../../public/audio-match/afp.js', import.meta.url), 'utf8')
+  const binary = readFileSync(new URL('../../public/audio-match/afp.wasm.js', import.meta.url), 'utf8')
+  let attempts = 0
+  const wasm = Object.create(WebAssembly)
+  wasm.instantiate = (...args: Parameters<typeof WebAssembly.instantiate>) => {
+    if (++attempts === 1) return Promise.reject(new Error('模拟 WASM 加载失败'))
+    return Reflect.apply(WebAssembly.instantiate, WebAssembly, args)
+  }
+  const result = await runInNewContext(`${binary}\n${runtime}\n(async () => {
+    let failed = false
+    try { await GenerateFP(new Float32Array(24000)) } catch { failed = true }
+    return [failed, typeof await GenerateFP(new Float32Array(24000))]
+  })()`, { WebAssembly: wasm, setTimeout, clearTimeout, console: { info() {}, log() {}, warn() {}, error() {} }, atob, btoa })
+  assert.equal(result[0], true)
+  assert.equal(result[1], 'string')
+  assert.equal(attempts, 2)
+})
+
+test('识别请求超时后退出处理并取消网络请求', async () => {
+  const response = deferred<unknown>()
+  const { api, calls, timers } = createHarness({ response })
+  await api.openAudioMatchModal()
+  const matching = api.handleAudioMatchFingerprint(new Float32Array(144000))
+  await new Promise(setImmediate)
+  timers.values().next().value!()
+  await matching
+  assert.equal(api.audioMatchProcessing.value, false)
+  assert.equal(api.audioMatchError.value, zhSongs.requestForm.audioMatchFailed)
+  assert.equal((calls.requests[0][1] as { signal?: AbortSignal }).signal?.aborted, true)
+})
+
+test('麦克风断开时释放会话并可重新授权', async () => {
+  const { api, sandbox } = createHarness()
+  let ended!: () => void
+  sandbox.navigator.mediaDevices.getUserMedia = () => Promise.resolve({ getTracks: () => [{ stop() {}, addEventListener: (_event: string, callback: () => void) => { ended = callback } }] })
+  await api.openAudioMatchModal()
+  await api.startAudioMatchRecording()
+  ended()
+  assert.equal(api.audioMatchRecording.value, false)
+  assert.equal(api.getContext(), null)
+  assert.equal(api.audioMatchError.value, zhSongs.requestForm.microphoneNotFound)
+  await api.startAudioMatchRecording()
+  assert.equal(api.audioMatchRecording.value, true)
 })
