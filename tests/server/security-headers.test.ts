@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { stripTypeScriptTypes } from 'node:module'
 import test from 'node:test'
 import { runInNewContext } from 'node:vm'
 import { createApp, defineEventHandler, getHeader, setHeader, toWebHandler } from 'h3'
+import ts from 'typescript'
 
 test('页面允许本站申请麦克风，保留其他设备限制', async () => {
   const source = readFileSync(new URL('../../server/middleware/01.security-headers.ts', import.meta.url), 'utf8')
   const handler = runInNewContext(
-    stripTypeScriptTypes(source).replace('export default ', ''),
+    ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText.replace('export default ', ''),
     { defineEventHandler, getHeader, setHeader }
   )
   const app = createApp()

@@ -565,6 +565,25 @@ test('WASM 初始化失败后清空缓存并允许重试', async () => {
   assert.equal(attempts, 2)
 })
 
+test('WASM 实例缺少所需导出时拒绝初始化并允许重试', async () => {
+  const runtime = readFileSync(new URL('../../public/audio-match/afp.js', import.meta.url), 'utf8')
+  const binary = readFileSync(new URL('../../public/audio-match/afp.wasm.js', import.meta.url), 'utf8')
+  let attempts = 0
+  const wasm = Object.create(WebAssembly)
+  wasm.instantiate = (...args: Parameters<typeof WebAssembly.instantiate>) => {
+    if (++attempts === 1) return Promise.resolve({ instance: { exports: {} } })
+    return Reflect.apply(WebAssembly.instantiate, WebAssembly, args)
+  }
+  const result = await runInNewContext(`${binary}\n${runtime}\n(async () => {
+    let failed = false
+    try { await GenerateFP(new Float32Array(24000)) } catch { failed = true }
+    return [failed, typeof await GenerateFP(new Float32Array(24000))]
+  })()`, { WebAssembly: wasm, setTimeout, clearTimeout, console: { info() {}, log() {}, warn() {}, error() {} }, atob, btoa })
+  assert.equal(result[0], true)
+  assert.equal(result[1], 'string')
+  assert.equal(attempts, 2)
+})
+
 test('识别请求超时后退出处理并取消网络请求', async () => {
   const response = deferred<unknown>()
   const { api, calls, timers } = createHarness({ response })
@@ -590,4 +609,46 @@ test('麦克风断开时释放会话并可重新授权', async () => {
   assert.equal(api.audioMatchError.value, zhSongs.requestForm.microphoneNotFound)
   await api.startAudioMatchRecording()
   assert.equal(api.audioMatchRecording.value, true)
+})
+
+test('关闭重开后旧的初始化重试不会自动启动新会话录音', async () => {
+  const failedMicrophone = deferred<MicrophoneStream>()
+  const { api, sandbox, stream } = createHarness({ microphone: failedMicrophone })
+  const opening = api.openAudioMatchModal()
+  failedMicrophone.reject(Object.assign(new Error('权限拒绝'), { name: 'NotAllowedError' }))
+  await opening
+  const microphone = deferred<MicrophoneStream>()
+  sandbox.navigator.mediaDevices.getUserMedia = () => microphone.promise
+  const retry = api.startAudioMatchRecording()
+  await api.closeAudioMatchModal()
+  sandbox.navigator.mediaDevices.getUserMedia = () => Promise.resolve(stream)
+  await api.openAudioMatchModal()
+  const context = api.getContext()
+  microphone.resolve(stream)
+  await retry
+  assert.equal(api.getContext(), context)
+  assert.equal(api.audioMatchRecording.value, false)
+  assert.equal(api.audioMatchStatus.value, zhSongs.requestForm.microphoneReady)
+})
+
+test('恢复播放被拒绝时不误报为麦克风权限拒绝', async () => {
+  const { api } = createHarness()
+  await api.openAudioMatchModal()
+  const context = api.getContext()
+  context.state = 'suspended'
+  context.resume = () => Promise.reject(Object.assign(new Error('播放被阻止'), { name: 'NotAllowedError' }))
+  await api.startAudioMatchRecording()
+  assert.equal(api.audioMatchError.value, zhSongs.requestForm.audioMatchInitFailed)
+  assert.equal(api.audioMatchPreparing.value, false)
+})
+
+test('首次初始化恢复播放失败时不误报麦克风权限', async () => {
+  const { api, sandbox, calls } = createHarness()
+  sandbox.window.AudioContext.prototype.resume = () => Promise.reject(
+    Object.assign(new Error('播放被阻止'), { name: 'NotAllowedError' })
+  )
+  await api.openAudioMatchModal()
+  assert.equal(api.audioMatchError.value, zhSongs.requestForm.audioMatchInitFailed)
+  assert.equal(api.audioMatchPreparing.value, false)
+  assert.equal(calls.stopped, 1)
 })

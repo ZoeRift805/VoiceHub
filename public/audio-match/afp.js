@@ -1497,7 +1497,7 @@ let AudioFingerprintRuntime = ((options = {}) => {
                         return WebAssembly.instantiate(e, import_table)
                     })).then((function(t) {
                         return t
-                    })).then(e, (function(t) {
+                    })).then(e).catch((function(t) {
                         g("failed to asynchronously prepare wasm: " + t,Q);
                         // 初始化失败由外层 Promise 接收，避免未处理的异步异常。
                         if (o.onAbort) o.onAbort(t);

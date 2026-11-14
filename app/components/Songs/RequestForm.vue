@@ -1898,7 +1898,13 @@ const initializeAudioMatch = async () => {
       (async () => {
         const context = new AudioContextClass()
         audioMatchContext = context
-        if (context.state === 'suspended') await waitForAudioMatch(context.resume(), locale.value.audioMatchInitFailed)
+        if (context.state === 'suspended') {
+          try {
+            await waitForAudioMatch(context.resume(), locale.value.audioMatchInitFailed)
+          } catch {
+            throw new Error(locale.value.audioMatchInitFailed)
+          }
+        }
         return context
       })(),
       ensureAudioMatchScripts(),
@@ -2091,8 +2097,11 @@ const startAudioMatchRecording = async () => {
   audioMatchResults.value = []
 
   if (!audioMatchRecorderNode) {
+    const initialization = initializeAudioMatch()
+    const sessionId = audioMatchSessionId
     try {
-      await initializeAudioMatch()
+      await initialization
+      if (sessionId !== audioMatchSessionId) return
     } catch (err) {
       console.error('重新初始化听歌识曲失败:', err)
       audioMatchError.value = getAudioMatchErrorMessage(err)
@@ -2106,10 +2115,10 @@ const startAudioMatchRecording = async () => {
     try {
       audioMatchPreparing.value = true
       await waitForAudioMatch(context.resume(), locale.value.audioMatchInitFailed)
-    } catch (err) {
+    } catch {
       if (context !== audioMatchContext) return
       audioMatchStatus.value = ''
-      audioMatchError.value = getAudioMatchErrorMessage(err)
+      audioMatchError.value = locale.value.audioMatchInitFailed
       return
     } finally {
       if (context === audioMatchContext) audioMatchPreparing.value = false
