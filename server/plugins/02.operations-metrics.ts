@@ -22,6 +22,19 @@ let musicSourceProbeInFlight: Promise<void> | null = null
 let lastMusicSourceProbeAt = 0
 let musicSourceProbeConfigVersion = 0
 
+type PendingMetricBucket = {
+  bucketStart: Date
+  requestCount: number
+  clientErrorCount: number
+  serverErrorCount: number
+  totalDurationMs: number
+  maxDurationMs: number
+}
+
+let metricFlushTimer: ReturnType<typeof setTimeout> | null = null
+let metricFlushInFlight: Promise<void> | null = null
+const pendingMetricBuckets = new Map<number, PendingMetricBucket>()
+
 const isMusicSourceProbeRequest = (event: any) => String(event.node.req.headers[MUSIC_SOURCE_PROBE_HEADER] || '') === '1'
 const isMonitoringRequest = (url = '') => ['/api/admin/operations/', '/api/system/status', '/api/admin/database/pool-status', '/api/admin/database/performance', '/api/admin/backup/history'].some((prefix) => url.startsWith(prefix))
 const hasPlatformEnv = (value: string | undefined) => Boolean(value && value !== '0' && value.toLowerCase() !== 'false')
@@ -47,17 +60,91 @@ const getEnabledMusicSourceSet = async () => {
   }
 }
 
+const getCurrentMetricBucketStart = () => {
+  const now = getServerTimestamp()
+  const bucketStart = getServerDate()
+  bucketStart.setTime(Math.floor(now / 60_000) * 60_000)
+  return bucketStart
+}
+
+const restoreMetricBucket = (bucket: PendingMetricBucket) => {
+  const key = bucket.bucketStart.getTime()
+  const pending = pendingMetricBuckets.get(key)
+  pendingMetricBuckets.set(key, pending ? {
+    ...pending,
+    requestCount: pending.requestCount + bucket.requestCount,
+    clientErrorCount: pending.clientErrorCount + bucket.clientErrorCount,
+    serverErrorCount: pending.serverErrorCount + bucket.serverErrorCount,
+    totalDurationMs: pending.totalDurationMs + bucket.totalDurationMs,
+    maxDurationMs: Math.max(pending.maxDurationMs, bucket.maxDurationMs)
+  } : bucket)
+}
+
+const flushMetricBucket = async () => {
+  if (metricFlushInFlight || !pendingMetricBuckets.size) return metricFlushInFlight || undefined
+  const buckets = [...pendingMetricBuckets.values()]
+  pendingMetricBuckets.clear()
+  metricFlushInFlight = (async () => {
+    let instanceId: string
+    try {
+      instanceId = await getInstanceId()
+    } catch {
+      buckets.forEach(restoreMetricBucket)
+      return
+    }
+    for (const bucket of buckets) {
+      try {
+        await db.execute(sql`
+          INSERT INTO operations_metric_buckets (bucket_start, instance_id, request_count, client_error_count, server_error_count, total_duration_ms, max_duration_ms)
+          VALUES (${bucket.bucketStart}, ${instanceId}, ${bucket.requestCount}, ${bucket.clientErrorCount}, ${bucket.serverErrorCount}, ${bucket.totalDurationMs}, ${bucket.maxDurationMs})
+          ON CONFLICT (bucket_start, instance_id) DO UPDATE SET
+            request_count = operations_metric_buckets.request_count + EXCLUDED.request_count,
+            client_error_count = operations_metric_buckets.client_error_count + EXCLUDED.client_error_count,
+            server_error_count = operations_metric_buckets.server_error_count + EXCLUDED.server_error_count,
+            total_duration_ms = operations_metric_buckets.total_duration_ms + EXCLUDED.total_duration_ms,
+            max_duration_ms = GREATEST(operations_metric_buckets.max_duration_ms, EXCLUDED.max_duration_ms)
+        `)
+      } catch {
+        restoreMetricBucket(bucket)
+      }
+    }
+  })().finally(() => {
+    metricFlushInFlight = null
+    if (pendingMetricBuckets.size) scheduleMetricBucketFlush()
+  })
+  return metricFlushInFlight
+}
+
+const scheduleMetricBucketFlush = () => {
+  if (metricFlushTimer || !pendingMetricBuckets.size) return
+  metricFlushTimer = setTimeout(() => {
+    metricFlushTimer = null
+    void flushMetricBucket()
+  }, 10_000)
+  metricFlushTimer.unref?.()
+}
+
 const persistMinuteBucket = (statusCode: number, durationMs: number) => {
-  void getInstanceId().then((instanceId) => db.execute(sql`
-    INSERT INTO operations_metric_buckets (bucket_start, instance_id, request_count, client_error_count, server_error_count, total_duration_ms, max_duration_ms)
-    VALUES (date_trunc('minute', now()), ${instanceId}, 1, ${statusCode >= 400 && statusCode < 500 ? 1 : 0}, ${statusCode >= 500 ? 1 : 0}, ${Math.round(durationMs)}, ${Math.round(durationMs)})
-    ON CONFLICT (bucket_start, instance_id) DO UPDATE SET
-      request_count = operations_metric_buckets.request_count + 1,
-      client_error_count = operations_metric_buckets.client_error_count + EXCLUDED.client_error_count,
-      server_error_count = operations_metric_buckets.server_error_count + EXCLUDED.server_error_count,
-      total_duration_ms = operations_metric_buckets.total_duration_ms + EXCLUDED.total_duration_ms,
-      max_duration_ms = GREATEST(operations_metric_buckets.max_duration_ms, EXCLUDED.max_duration_ms)
-  `)).catch(() => {})
+  const bucketStart = getCurrentMetricBucketStart()
+  const bucketKey = bucketStart.getTime()
+  let bucket = pendingMetricBuckets.get(bucketKey)
+  if (!bucket) {
+    bucket = {
+      bucketStart,
+      requestCount: 0,
+      clientErrorCount: 0,
+      serverErrorCount: 0,
+      totalDurationMs: 0,
+      maxDurationMs: 0
+    }
+    pendingMetricBuckets.set(bucketKey, bucket)
+  }
+  bucket.requestCount += 1
+  if (statusCode >= 400 && statusCode < 500) bucket.clientErrorCount += 1
+  if (statusCode >= 500) bucket.serverErrorCount += 1
+  bucket.totalDurationMs += Math.round(durationMs)
+  bucket.maxDurationMs = Math.max(bucket.maxDurationMs, Math.round(durationMs))
+  scheduleMetricBucketFlush()
 }
 
 export default defineNitroPlugin((nitroApp) => {

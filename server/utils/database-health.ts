@@ -1,10 +1,11 @@
 import { db, testConnection } from '~/drizzle/db'
 import { sql } from 'drizzle-orm'
+import { getServerDate, getServerTimestamp } from '~~/server/utils/serverTime'
 
 // 数据库健康检查
 export async function checkDatabaseHealth() {
   try {
-    const startTime = Date.now()
+    const startTime = getServerTimestamp()
 
     // 基本连接测试
     const isConnected = await testConnection()
@@ -12,14 +13,14 @@ export async function checkDatabaseHealth() {
       return {
         status: 'unhealthy',
         message: 'Database connection failed',
-        responseTime: Date.now() - startTime
+        responseTime: getServerTimestamp() - startTime
       }
     }
 
     // 查询测试
     await db.execute(sql`SELECT 1 as test`)
 
-    const responseTime = Date.now() - startTime
+    const responseTime = getServerTimestamp() - startTime
 
     return {
       status: responseTime < 1000 ? 'healthy' : 'slow',
@@ -65,37 +66,28 @@ export async function retryDatabaseOperation<T>(
 export async function getConnectionPoolStatus() {
   try {
     const result = await db.execute(sql`
-      SELECT 
-        setting::int as max_connections
-      FROM pg_settings 
-      WHERE name = 'max_connections'
-    `)
-
-    const activeConnections = await db.execute(sql`
-      SELECT count(*) as active_connections
-      FROM pg_stat_activity 
-      WHERE state = 'active'
-    `)
-
-    const totalConnections = await db.execute(sql`
-      SELECT count(*) as total_connections
+      SELECT
+        (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') AS max_connections,
+        count(*) FILTER (WHERE state = 'active')::int AS active_connections,
+        count(*)::int AS total_connections
       FROM pg_stat_activity
     `)
 
+    const row = result[0] as { max_connections?: number | string; active_connections?: number | string; total_connections?: number | string } | undefined
+    const maxConnections = Number(row?.max_connections || 0)
+    const activeConnections = Number(row?.active_connections || 0)
+    const totalConnections = Number(row?.total_connections || 0)
+
     return {
-      maxConnections: result[0]?.max_connections || 0,
-      activeConnections: activeConnections[0]?.active_connections || 0,
-      totalConnections: totalConnections[0]?.total_connections || 0,
-      utilization: result[0]?.max_connections
-        ? (
-            ((totalConnections[0]?.total_connections || 0) / result[0].max_connections) *
-            100
-          ).toFixed(2)
-        : '0'
+      maxConnections,
+      activeConnections,
+      totalConnections,
+      utilization: maxConnections ? ((totalConnections / maxConnections) * 100).toFixed(2) : '0'
     }
   } catch (error) {
     throw new Error(
-      `Failed to get connection pool status: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to get connection pool status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error }
     )
   }
 }
@@ -103,15 +95,10 @@ export async function getConnectionPoolStatus() {
 // 数据库性能指标
 export async function getDatabaseMetrics() {
   try {
-    const startTime = Date.now()
-
-    // 测试查询响应时间
-    await db.execute(sql`SELECT 1`)
-    const responseTime = Date.now() - startTime
-
-    // 获取数据库统计信息
+    const startTime = getServerTimestamp()
     const stats = await db.execute(sql`
-      SELECT 
+      SELECT
+        1 AS health_check,
         numbackends as active_connections,
         xact_commit as transactions_committed,
         xact_rollback as transactions_rolled_back,
@@ -120,22 +107,32 @@ export async function getDatabaseMetrics() {
       FROM pg_stat_database 
       WHERE datname = current_database()
     `)
+    const responseTime = getServerTimestamp() - startTime
 
-    const stat = stats[0] || {}
+    const stat = stats[0] as {
+      active_connections?: number | string
+      transactions_committed?: number | string
+      transactions_rolled_back?: number | string
+      blocks_read?: number | string
+      blocks_hit?: number | string
+    } | undefined
+    const blocksRead = Number(stat?.blocks_read || 0)
+    const blocksHit = Number(stat?.blocks_hit || 0)
 
     return {
       responseTime,
-      activeConnections: stat.active_connections || 0,
-      transactionsCommitted: stat.transactions_committed || 0,
-      transactionsRolledBack: stat.transactions_rolled_back || 0,
+      activeConnections: Number(stat?.active_connections || 0),
+      transactionsCommitted: Number(stat?.transactions_committed || 0),
+      transactionsRolledBack: Number(stat?.transactions_rolled_back || 0),
       cacheHitRatio:
-        stat.blocks_read && stat.blocks_hit
-          ? ((stat.blocks_hit / (stat.blocks_hit + stat.blocks_read)) * 100).toFixed(2)
+        blocksRead || blocksHit
+          ? ((blocksHit / (blocksHit + blocksRead)) * 100).toFixed(2)
           : '0'
     }
   } catch (error) {
     throw new Error(
-      `Failed to get database metrics: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to get database metrics: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error }
     )
   }
 }
@@ -157,14 +154,14 @@ export async function getDatabaseDiagnostics() {
     diagnosticQuery(sql`SELECT pg_database_size(current_database()) AS database_bytes, pg_size_pretty(pg_database_size(current_database())) AS database_size`)
   ])
 
-  return { activity, locks, tables, size, collectedAt: new Date().toISOString() }
+  return { activity, locks, tables, size, collectedAt: getServerDate().toISOString() }
 }
 
 // 数据库备份状态检查（模拟）
 export async function checkBackupStatus() {
   // 这里可以集成实际的备份服务
   return {
-    lastBackup: new Date().toISOString(),
+    lastBackup: getServerDate().toISOString(),
     status: 'completed',
     size: '0 MB' // 模拟数据
   }

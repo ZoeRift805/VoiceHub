@@ -5,8 +5,10 @@ import { getRedisStats } from '~~/server/utils/redis'
 import { databaseManager } from '~~/server/utils/database-manager'
 import { getMusicSseStats } from '~~/server/api/music/websocket'
 import { getProgressSseStats } from '~~/server/api/progress/events'
+import { getServerDate, getServerTimestamp } from '~~/server/utils/serverTime'
 
 let sentryCache: { expiresAt: number; value: any } | null = null
+let sentryRequestInFlight: Promise<any> | null = null
 
 const getSentryIssues = async () => {
   const token = process.env.SENTRY_AUTH_TOKEN?.trim()
@@ -16,28 +18,35 @@ const getSentryIssues = async () => {
     return { configured: false, issues: [] }
   }
 
-  if (sentryCache && sentryCache.expiresAt > Date.now()) return sentryCache.value
+  if (sentryCache && sentryCache.expiresAt > getServerTimestamp()) return sentryCache.value
 
-  try {
-    const baseUrl = (process.env.SENTRY_API_URL || 'https://sentry.io/api/0').replace(/\/$/, '')
-    const response = await fetch(`${baseUrl}/projects/${encodeURIComponent(organization)}/${encodeURIComponent(project)}/issues/?query=is%3Aunresolved&limit=10`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(5000)
-    })
-    if (!response.ok) throw new Error(`Sentry API ${response.status}`)
-    const issues = await response.json() as Array<any>
-    const value = {
-      configured: true,
-      available: true,
-      issues: issues.map((issue) => ({ id: issue.id, title: issue.title, level: issue.level, count: issue.count, lastSeen: issue.lastSeen }))
+  if (sentryRequestInFlight) return sentryRequestInFlight
+
+  sentryRequestInFlight = (async () => {
+    try {
+      const baseUrl = (process.env.SENTRY_API_URL || 'https://sentry.io/api/0').replace(/\/$/, '')
+      const response = await fetch(`${baseUrl}/projects/${encodeURIComponent(organization)}/${encodeURIComponent(project)}/issues/?query=is%3Aunresolved&limit=10`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(1000)
+      })
+      if (!response.ok) throw new Error(`Sentry API ${response.status}`)
+      const issues = await response.json() as Array<any>
+      const value = {
+        configured: true,
+        available: true,
+        issues: issues.map((issue) => ({ id: issue.id, title: issue.title, level: issue.level, count: issue.count, lastSeen: issue.lastSeen }))
+      }
+      sentryCache = { value, expiresAt: getServerTimestamp() + 30_000 }
+      return value
+    } catch (error) {
+      const value = { configured: true, available: false, error: error instanceof Error ? error.message : 'Sentry 查询失败', issues: [] }
+      sentryCache = { value, expiresAt: getServerTimestamp() + 30_000 }
+      return value
+    } finally {
+      sentryRequestInFlight = null
     }
-    sentryCache = { value, expiresAt: Date.now() + 30_000 }
-    return value
-  } catch (error) {
-    const value = { configured: true, available: false, error: error instanceof Error ? error.message : 'Sentry 查询失败', issues: [] }
-    sentryCache = { value, expiresAt: Date.now() + 30_000 }
-    return value
-  }
+  })()
+  return sentryRequestInFlight
 }
 
 export default defineEventHandler(async (event) => {
@@ -46,42 +55,74 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: authResult.message })
   }
 
-  const requestId = String(getQuery(event).requestId || '').trim()
+  const query = getQuery(event)
+  const requestId = String(query.requestId || '').trim()
+  const requestedScope = String(query.details || '').trim()
+  const detailScope = ['overview', 'database', 'debug', 'logs'].includes(requestedScope)
+    ? requestedScope
+    : requestedScope === 'true'
+      ? 'all'
+      : ''
+  const includeDatabaseOverview = ['overview', 'database', 'all'].includes(detailScope)
+  const includeDatabaseDetails = detailScope === 'database' || detailScope === 'all'
+  const includeLogDetails = ['debug', 'logs', 'all'].includes(detailScope)
+  const includeSentryDetails = ['debug', 'all'].includes(detailScope)
 
-  const [pool, database, diagnostics, businessQueue, apiKeyUsage, persistedRequests, recentLogs, timeline, sentry, requestDiagnostics] = await Promise.allSettled([
-    databaseManager.getConnectionPoolStatus(),
-    databaseManager.getPerformanceMetrics(),
-    databaseManager.getDiagnostics(),
-    databaseManager.getBusinessQueueStats(),
-    databaseManager.getApiKeyUsageStats(),
-    databaseManager.getPersistedRequestSamples(),
-    databaseManager.getRecentApiLogs(),
-    databaseManager.getOperationsMetricTimeline(),
-    getSentryIssues(),
-    requestId ? databaseManager.getRequestDiagnostics(requestId) : Promise.resolve([])
+  // 按请求 ID 下钻只查询链路数据，避免再次触发整套监控采集。
+  if (requestId) {
+    const entries = await databaseManager.getRequestDiagnostics(requestId).catch(() => [])
+    return {
+      success: true,
+      data: {
+        diagnostic: { requestId, entries }
+      }
+    }
+  }
+
+  // 首屏只返回进程内指标；数据库聚合按分区请求，诊断仅在数据库分区执行。
+  const [overview, diagnostics, persistedRequests, recentLogs, sentry] = await Promise.allSettled([
+    includeDatabaseOverview ? databaseManager.getOperationsOverview() : Promise.resolve(null),
+    includeDatabaseDetails ? databaseManager.getDiagnostics() : Promise.resolve(null),
+    includeLogDetails ? databaseManager.getPersistedRequestSamples() : Promise.resolve(null),
+    includeLogDetails ? databaseManager.getRecentApiLogs() : Promise.resolve(null),
+    ['debug', 'all'].includes(detailScope) ? getSentryIssues() : Promise.resolve(null)
   ])
+
+  const databaseMetrics: Record<string, unknown> = overview.status === 'fulfilled'
+    ? { ...overview.value }
+    : { pool: null, performance: null, businessQueue: null, apiKeyUsage: null, timeline: null }
+  if (includeDatabaseDetails) {
+    databaseMetrics.diagnostics = diagnostics.status === 'fulfilled' ? diagnostics.value : null
+  }
+  if (includeLogDetails) {
+    databaseMetrics.persistedRequests = persistedRequests.status === 'fulfilled' ? persistedRequests.value : null
+    databaseMetrics.recentLogs = recentLogs.status === 'fulfilled' ? recentLogs.value : null
+  }
 
   return {
     success: true,
     data: {
+      system: {
+        timestamp: getServerDate().toISOString(),
+        uptime: process.uptime(),
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        memory: {
+          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+          total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+          external: Math.round(process.memoryUsage().external / 1024 / 1024)
+        }
+      },
       metrics: getOperationsMetrics(),
       redis: getRedisStats(),
       sse: {
         music: getMusicSseStats(),
         progress: getProgressSseStats()
       },
-      database: {
-        pool: pool.status === 'fulfilled' ? pool.value : null,
-        performance: database.status === 'fulfilled' ? database.value : null,
-        diagnostics: diagnostics.status === 'fulfilled' ? diagnostics.value : null,
-        businessQueue: businessQueue.status === 'fulfilled' ? businessQueue.value : null,
-        apiKeyUsage: apiKeyUsage.status === 'fulfilled' ? apiKeyUsage.value : null,
-        persistedRequests: persistedRequests.status === 'fulfilled' ? persistedRequests.value : null,
-        recentLogs: recentLogs.status === 'fulfilled' ? recentLogs.value : null,
-        timeline: timeline.status === 'fulfilled' ? timeline.value : null
-      },
-      sentry: sentry.status === 'fulfilled' ? sentry.value : { configured: false, issues: [] },
-      diagnostic: requestDiagnostics.status === 'fulfilled' ? { requestId, entries: requestDiagnostics.value } : { requestId, entries: [] }
+      database: databaseMetrics,
+      collectedAt: getServerTimestamp(),
+      ...(includeSentryDetails ? { sentry: sentry.status === 'fulfilled' && sentry.value ? sentry.value : { configured: false, issues: [] } } : {})
     }
   }
 })

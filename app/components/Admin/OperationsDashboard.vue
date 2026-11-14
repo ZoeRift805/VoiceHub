@@ -18,7 +18,7 @@
         <button type="button" class="auto-refresh-toggle" :aria-pressed="autoRefreshEnabled" @click="toggleAutoRefresh">
           <span :class="{ 'is-enabled': autoRefreshEnabled }" />自动刷新{{ autoRefreshEnabled ? '已开启' : '已暂停' }}
         </button>
-        <button type="button" class="refresh-button" :disabled="operationsLoading" @click="loadOperationsData()">
+        <button type="button" class="refresh-button" :disabled="operationsLoading" @click="loadOperationsData({ details: isDetailGroup, detailScope: detailScopeForGroup(activeGroup) })">
           <Icon name="refresh" :size="14" :class="{ 'icon-spin': operationsLoading }" />{{ operationsLoading ? '正在刷新' : locale.actions.refresh }}
         </button>
       </div>
@@ -46,7 +46,7 @@
         :error="item.error"
         :empty="item.empty"
         :stale="item.error && !!item.value"
-        @refresh="loadOperationsData"
+        @refresh="loadOperationsData({ details: isDetailGroup, detailScope: detailScopeForGroup(activeGroup) })"
       >
         <div class="ops-module-summary__value" :class="`ops-tone--${item.status}`">{{ item.value }}</div>
         <p>{{ item.detail }}</p>
@@ -887,7 +887,7 @@
           <button type="button" class="filter-field" disabled><span>{{ locale.filters.allScopes }}</span><Icon name="chevron-down" :size="13" /></button>
           <button type="button" class="filter-field" disabled><span>{{ locale.logCenter.allStatusCodes }}</span><Icon name="chevron-down" :size="13" /></button>
           <button type="button" class="filter-field" disabled><span>{{ locale.filters.lastHour }}</span><Icon name="chevron-down" :size="13" /></button>
-          <button type="button" class="filter-action" @click="loadOperationsData()"><Icon name="search" :size="13" />{{ locale.logCenter.query }}</button>
+          <button type="button" class="filter-action" @click="loadOperationsData({ details: true, detailScope: 'logs' })"><Icon name="search" :size="13" />{{ locale.logCenter.query }}</button>
         </div>
       </section>
 
@@ -1041,7 +1041,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from '~/components/UI/Icon.vue'
 import DrilldownLink from '~/components/Admin/DrilldownLink.vue'
 import OpsPanel from '~/components/Admin/Ops/OpsPanel.vue'
@@ -1072,50 +1072,106 @@ const operationsLastUpdated = ref(null)
 const runtimeNow = ref(Date.now())
 const operationsData = ref({ status: null, pool: null, performance: null, backups: [], metrics: null })
 const autoRefreshEnabled = ref(true)
-const moduleFetchErrors = ref({ system: false, pool: false, performance: false, backups: false, metrics: false })
+const moduleFetchErrors = ref({ system: false, pool: false, performance: false, backups: false, metrics: false, details: false })
+let operationsRequestInFlight = null
+let detailsRequestedScope = null
+let backupRequestInFlight = null
+let backupHistoryLoaded = false
+const isDetailGroup = computed(() => ['performance', 'business', 'database', 'debug', 'logs'].includes(activeGroup.value))
+const detailScopeForGroup = (group) => ['performance', 'business'].includes(group) ? 'overview' : group
 
-const loadOperationsData = async () => {
+const loadBackupHistory = async () => {
+  if (backupHistoryLoaded) return
+  if (backupRequestInFlight) return backupRequestInFlight
+  const request = $fetch('/api/admin/backup/history')
+    .then((response) => {
+      operationsData.value.backups = response?.data || []
+      backupHistoryLoaded = true
+      moduleFetchErrors.value = { ...moduleFetchErrors.value, backups: false }
+    })
+    .catch(() => {
+      moduleFetchErrors.value = { ...moduleFetchErrors.value, backups: true }
+    })
+    .finally(() => {
+      backupRequestInFlight = null
+    })
+  backupRequestInFlight = request
+  return request
+}
+
+const loadOperationsData = async ({ details = false, detailScope = '' } = {}) => {
+  if (operationsRequestInFlight) {
+    if (details) detailsRequestedScope = detailScope || activeGroup.value
+    return operationsRequestInFlight
+  }
+  detailsRequestedScope = null
   operationsLoading.value = true
   operationsError.value = false
 
-  const [statusResult, poolResult, performanceResult, backupResult, metricsResult] = await Promise.allSettled([
-    $fetch('/api/system/status'),
-    $fetch('/api/admin/database/pool-status'),
-    $fetch('/api/admin/database/performance'),
-    $fetch('/api/admin/backup/history'),
-    $fetch('/api/admin/operations/metrics')
-  ])
+  const request = (async () => {
+    let metricsResult
+    try {
+      metricsResult = {
+        status: 'fulfilled',
+        value: await $fetch('/api/admin/operations/metrics', { query: details ? { details: detailScope || 'true' } : undefined })
+      }
+    } catch {
+      metricsResult = { status: 'rejected' }
+    }
 
-  if (statusResult.status === 'fulfilled') operationsData.value.status = statusResult.value
-  if (poolResult.status === 'fulfilled') operationsData.value.pool = poolResult.value
-  if (performanceResult.status === 'fulfilled') operationsData.value.performance = performanceResult.value
-  if (backupResult.status === 'fulfilled') operationsData.value.backups = backupResult.value?.data || []
-  if (metricsResult.status === 'fulfilled') {
-    const metrics = metricsResult.value?.data || {}
-    operationsData.value.metrics = metrics
-    if (metrics.database?.pool) operationsData.value.pool = metrics.database.pool
-    if (metrics.database?.performance) operationsData.value.performance = metrics.database.performance
-  }
+    if (metricsResult.status === 'fulfilled') {
+      const metrics = metricsResult.value?.data || {}
+      const previous = operationsData.value.metrics || {}
+      operationsData.value.status = {
+        ...(operationsData.value.status || {}),
+        system: metrics.system || operationsData.value.status?.system || null,
+        instance: metrics.instance || operationsData.value.status?.instance || null,
+        database: metrics.databaseStatus || operationsData.value.status?.database || null
+      }
+      operationsData.value.metrics = {
+        ...previous,
+        ...metrics,
+        database: { ...(previous.database || {}), ...(metrics.database || {}) },
+        diagnostic: metrics.diagnostic ?? previous.diagnostic,
+        sentry: metrics.sentry ?? previous.sentry
+      }
+      if (metrics.database?.pool) operationsData.value.pool = metrics.database.pool
+      if (metrics.database?.performance) operationsData.value.performance = metrics.database.performance
+    }
 
-  moduleFetchErrors.value = {
-    system: statusResult.status === 'rejected',
-    pool: poolResult.status === 'rejected',
-    performance: performanceResult.status === 'rejected',
-    backups: backupResult.status === 'rejected',
-    metrics: metricsResult.status === 'rejected'
-  }
+    moduleFetchErrors.value = {
+      system: metricsResult.status === 'rejected',
+      pool: metricsResult.status === 'rejected',
+      performance: metricsResult.status === 'rejected',
+      backups: moduleFetchErrors.value.backups,
+      metrics: metricsResult.status === 'rejected',
+      details: details && metricsResult.status === 'rejected'
+    }
 
-  operationsError.value = statusResult.status === 'rejected'
-  operationsLastUpdated.value = new Date()
-  operationsLoading.value = false
-  initialOperationsLoading.value = false
+    operationsError.value = metricsResult.status === 'rejected'
+    operationsLastUpdated.value = new Date()
+    initialOperationsLoading.value = false
+    void loadBackupHistory()
+  })()
+
+  const trackedRequest = request.finally(() => {
+    operationsRequestInFlight = null
+    operationsLoading.value = false
+    if (detailsRequestedScope && detailsRequestedScope !== detailScope) {
+      const scope = detailsRequestedScope
+      detailsRequestedScope = null
+      void loadOperationsData({ details: true, detailScope: scope })
+    }
+  })
+  operationsRequestInFlight = trackedRequest
+  return trackedRequest
 }
 
 let operationsRefreshTimer = null
 let runtimeClockTimer = null
 const startAutoRefresh = () => {
   if (operationsRefreshTimer || !autoRefreshEnabled.value) return
-  operationsRefreshTimer = window.setInterval(loadOperationsData, 30000)
+  operationsRefreshTimer = window.setInterval(() => loadOperationsData({ details: isDetailGroup.value, detailScope: detailScopeForGroup(activeGroup.value) }), 30000)
 }
 const stopAutoRefresh = () => {
   if (!operationsRefreshTimer) return
@@ -1138,8 +1194,16 @@ onBeforeUnmount(() => {
   if (runtimeClockTimer) window.clearInterval(runtimeClockTimer)
 })
 
-const systemSnapshot = computed(() => operationsData.value.status?.system || null)
-const databaseSnapshot = computed(() => operationsData.value.status?.database || null)
+const systemSnapshot = computed(() => operationsData.value.status?.system || operationsData.value.metrics?.system || null)
+const databaseSnapshot = computed(() => {
+  const snapshot = operationsData.value.status?.database
+  if (snapshot) return snapshot
+  const database = operationsData.value.metrics?.database
+  if (database?.pool || database?.performance) {
+    return { connected: true, connectionInfo: { serverlessMode: true }, error: null }
+  }
+  return null
+})
 const latestBackup = computed(() => operationsData.value.backups?.[0] || null)
 const runtimeMetrics = computed(() => operationsData.value.metrics?.metrics || null)
 const runtimeHttpMetrics = computed(() => runtimeMetrics.value?.http || null)
@@ -1230,8 +1294,8 @@ const httpErrorRate = computed(() => {
   return Number(http.recent5xx || 0) / Number(http.recentRequests)
 })
 const systemModuleStatus = computed(() => {
-  if (initialOperationsLoading.value || !operationsData.value.status) return 'unknown'
-  return operationsData.value.status.status === 'ok' ? 'ok' : 'error'
+  if (initialOperationsLoading.value || !systemSnapshot.value) return 'unknown'
+  return 'ok'
 })
 const performanceModuleStatus = computed(() => {
   const http = runtimeHttpMetrics.value
@@ -1278,10 +1342,10 @@ const securityModuleStatus = computed(() => {
   return 'ok'
 })
 const overallStatus = computed(() => {
-  if (initialOperationsLoading.value || !runtimeMetrics.value || !operationsData.value.status) return 'unknown'
-  const required = [systemModuleStatus.value, performanceModuleStatus.value, databaseModuleStatus.value]
-  if (required.includes('unknown')) return 'unknown'
-  return maxStatus(systemModuleStatus.value, performanceModuleStatus.value, databaseModuleStatus.value, dependenciesModuleStatus.value, securityModuleStatus.value)
+  if (initialOperationsLoading.value || !runtimeMetrics.value || !systemSnapshot.value) return 'unknown'
+  const statuses = [systemModuleStatus.value, performanceModuleStatus.value, dependenciesModuleStatus.value, securityModuleStatus.value]
+  if (databaseSnapshot.value) statuses.push(databaseModuleStatus.value)
+  return maxStatus(...statuses)
 })
 const overallStatusText = computed(() => ({ ok: '系统正常', warning: '系统警告', error: '系统异常', unknown: '状态未知' }[overallStatus.value]))
 const abnormalModuleCount = computed(() => [systemModuleStatus.value, performanceModuleStatus.value, databaseModuleStatus.value, dependenciesModuleStatus.value, securityModuleStatus.value].filter((status) => status === 'error').length)
@@ -1456,6 +1520,12 @@ const sloHealthRecommendations = computed(() => {
   if (sloHealthMetrics.value.some((item) => item.status === 'unknown')) recommendations.push(messages.sloAdviceCoverage)
   if (!recommendations.length) recommendations.push(messages.sloAdviceHealthy)
   return [...new Set(recommendations.filter(Boolean))].slice(0, 3)
+})
+
+watch(activeGroup, (group) => {
+    if (['performance', 'business', 'database', 'debug', 'logs'].includes(group)) {
+      loadOperationsData({ details: true, detailScope: detailScopeForGroup(group) })
+    }
 })
 const formatBytes = (value) => {
   const bytes = Number(value)
@@ -4426,4 +4496,209 @@ const riskLevels = computed(() => [
     grid-template-columns: repeat(9, minmax(0, 1fr));
   }
 }
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard,
+:global(:root[data-theme='ModernLight']) .operations-dashboard {
+  --ops-ok: color-mix(in srgb, var(--success) 68%, var(--text-primary));
+  --ops-warning: color-mix(in srgb, var(--warning) 68%, var(--text-primary));
+  --ops-error: color-mix(in srgb, var(--error) 72%, var(--text-primary));
+  --ops-unknown: var(--text-tertiary);
+  --ops-info: var(--text-secondary);
+  --ops-text-1: var(--text-primary);
+  --ops-text-2: var(--text-secondary);
+  --ops-text-3: var(--text-tertiary);
+  --ops-panel: var(--bg-secondary);
+  --ops-control: var(--bg-primary);
+  --ops-inset: var(--bg-tertiary);
+  --ops-line: color-mix(in srgb, var(--border-primary) 88%, transparent);
+  --ops-line-strong: var(--border-secondary);
+  color: var(--ops-text-1);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.operations-loading-state, .refresh-button, .request-id-shortcut, .group-navigation, .group-navigation__label, .panel, .deployment-mode-card, .signal-card, .metric-card, .server-summary-strip, .log-detail-row td, .log-detail-grid pre, .diagnostic-duration-summary, .audit-filters, .overview-event-filters, .overview-log-filters, .diagnostic-search-grid, .log-search-grid, .diagnostic-summary-grid),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.operations-loading-state, .refresh-button, .request-id-shortcut, .group-navigation, .group-navigation__label, .panel, .deployment-mode-card, .signal-card, .metric-card, .server-summary-strip, .log-detail-row td, .log-detail-grid pre, .diagnostic-duration-summary, .audit-filters, .overview-event-filters, .overview-log-filters, .diagnostic-search-grid, .log-search-grid, .diagnostic-summary-grid) {
+  border-color: var(--ops-line);
+  background-color: var(--ops-panel);
+  color: var(--ops-text-1);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.panel, .deployment-mode-card, .signal-card, .metric-card, .server-summary-strip, .ops-status-spine, .ops-key-metric, .ops-metric-item, .dependency-card, .health-score-ring, .log-config, .trace-waterfall, .activity-filters),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.panel, .deployment-mode-card, .signal-card, .metric-card, .server-summary-strip, .ops-status-spine, .ops-key-metric, .ops-metric-item, .dependency-card, .health-score-ring, .log-config, .trace-waterfall, .activity-filters) {
+  border-color: var(--ops-line);
+  background-color: var(--ops-panel);
+  color: var(--ops-text-1);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.metric-formula, .log-detail-grid pre, .trace-waterfall__track, .scope-row, .analysis-legend > div),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.metric-formula, .log-detail-grid pre, .trace-waterfall__track, .scope-row, .analysis-legend > div) {
+  background-color: var(--ops-inset);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.panel-header, .panel-title, .subsection-heading h3, .deployment-mode-card strong, .server-summary-strip strong, .metric-value, .health-score-ring strong, .health-live-row strong, .detail-grid dd, .summary-grid dd, .server-health-details dd, .server-resource-list dd, .alert-rule-list p, .log-detail-grid strong, .log-detail-grid dd),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.panel-header, .panel-title, .subsection-heading h3, .deployment-mode-card strong, .server-summary-strip strong, .metric-value, .health-score-ring strong, .health-live-row strong, .detail-grid dd, .summary-grid dd, .server-health-details dd, .server-resource-list dd, .alert-rule-list p, .log-detail-grid strong, .log-detail-grid dd) {
+  color: var(--ops-text-1);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.operations-loading-state p, .refresh-button, .request-id-shortcut input, .request-id-shortcut button, .panel-link, .group-navigation__label, .group-tab, .deployment-mode-card p, .server-summary-strip span, .panel-description, .subsection-heading p, .status-badge, .health-score-wrap > p, .health-score-ring span, .health-live-details__title, .health-live-row span, .metric-label, .metric-detail, .server-health-details dt, .server-resource-list dt, .alert-rule-list small, .alert-rule-list strong, .chart-axis-label, .chart-time-labels, .log-detail-grid dt, .dependency-uptime-row__label, .dependency-card__observed, .uptime-strip__legend, .empty-cell),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.operations-loading-state p, .refresh-button, .request-id-shortcut input, .request-id-shortcut button, .panel-link, .group-navigation__label, .group-tab, .deployment-mode-card p, .server-summary-strip span, .panel-description, .subsection-heading p, .status-badge, .health-score-wrap > p, .health-score-ring span, .health-live-details__title, .health-live-row span, .metric-label, .metric-detail, .server-health-details dt, .server-resource-list dt, .alert-rule-list small, .alert-rule-list strong, .chart-axis-label, .chart-time-labels, .log-detail-grid dt, .dependency-uptime-row__label, .dependency-card__observed, .uptime-strip__legend, .empty-cell) {
+  color: var(--ops-text-2);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.ops-status-spine__eyebrow, .ops-status-spine__meta, .ops-status-count span, .ops-toolbar__hint, .ops-key-metric > span, .ops-key-metric small, .ops-key-metric p, .ops-module-summary p, .ops-metric-item__label, .ops-metric-item__detail, .ops-unknown-note, .dependency-card dt, .dependency-card dd, .dependency-card__observed, .uptime-strip__legend, .log-config__hint, .trace-waterfall__label),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.ops-status-spine__eyebrow, .ops-status-spine__meta, .ops-status-count span, .ops-toolbar__hint, .ops-key-metric > span, .ops-key-metric small, .ops-key-metric p, .ops-module-summary p, .ops-metric-item__label, .ops-metric-item__detail, .ops-unknown-note, .dependency-card dt, .dependency-card dd, .dependency-card__observed, .uptime-strip__legend, .log-config__hint, .trace-waterfall__label) {
+  color: var(--ops-text-2);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.ops-status-spine__headline, .ops-status-count strong, .ops-key-metric strong, .ops-module-summary__value, .ops-metric-item__value, .log-config__title, .trace-waterfall__duration),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.ops-status-spine__headline, .ops-status-count strong, .ops-key-metric strong, .ops-module-summary__value, .ops-metric-item__value, .log-config__title, .trace-waterfall__duration) {
+  color: var(--ops-text-1);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.group-navigation__section + .group-navigation__section, .group-navigation__label, .server-summary-strip > div, .panel-header, .health-live-details, .health-live-row, .detail-grid > div, .summary-grid > div, .server-health-details > div, .server-resource-list > div, .alert-rule-list > div, .dependency-card dl > div, .error-code-chart, .error-code-legend > div),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.group-navigation__section + .group-navigation__section, .group-navigation__label, .server-summary-strip > div, .panel-header, .health-live-details, .health-live-row, .detail-grid > div, .summary-grid > div, .server-health-details > div, .server-resource-list > div, .alert-rule-list > div, .dependency-card dl > div, .error-code-chart, .error-code-legend > div) {
+  border-color: var(--ops-line);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.group-tab--active, .subsection-heading, .operations-loading-state__spinner, .panel-link, .request-id-shortcut, .request-id-shortcut button),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.group-tab--active, .subsection-heading, .operations-loading-state__spinner, .panel-link, .request-id-shortcut, .request-id-shortcut button) {
+  color: var(--ops-info);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.chart-bar--info, .log-level--info),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.chart-bar--info, .log-level--info) {
+  background-color: color-mix(in srgb, var(--ops-info) 14%, var(--ops-panel));
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .group-tab--active::after,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .group-tab--active::after {
+  background-color: var(--ops-info);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.request-id-shortcut input, .diagnostic-search-grid input, .diagnostic-search-grid textarea, .log-search-grid input, .log-search-grid textarea, .overview-event-filters input, .overview-log-filters input, .audit-filters input),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.request-id-shortcut input, .diagnostic-search-grid input, .diagnostic-search-grid textarea, .log-search-grid input, .log-search-grid textarea, .overview-event-filters input, .overview-log-filters input, .audit-filters input) {
+  color: var(--ops-text-1);
+  background: var(--ops-control);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.log-result-row:hover, .group-navigation__label, .log-detail-grid pre, .trace-waterfall__track, .scope-row, .alert-rule-list > div, .server-summary-strip > div),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.log-result-row:hover, .group-navigation__label, .log-detail-grid pre, .trace-waterfall__track, .scope-row, .alert-rule-list > div, .server-summary-strip > div) {
+  background-color: var(--ops-inset);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.log-level--error, .log-level--warn, .log-level--info),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.log-level--error, .log-level--warn, .log-level--info) {
+  background-color: color-mix(in srgb, currentColor 12%, var(--ops-panel));
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .log-level--error,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .log-level--error { color: var(--ops-error); }
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .log-level--warn,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .log-level--warn { color: var(--ops-warning); }
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .log-level--info,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .log-level--info { color: var(--ops-info); }
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.detail-grid dt, .summary-grid dt, .source-inline-metrics, .source-inline-metrics strong, .metric-formula, .health-score-wrap > p, .health-score-ring span, .health-live-details__title, .health-live-row span, .server-health-details dt, .server-resource-list dt, .alert-rule-list small, .alert-rule-list strong, .dependency-card dt, .dependency-card dd, .dependency-uptime-row__label, .error-code-legend dt, .error-code-legend dd, .empty-cell),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.detail-grid dt, .summary-grid dt, .source-inline-metrics, .source-inline-metrics strong, .metric-formula, .health-score-wrap > p, .health-score-ring span, .health-live-details__title, .health-live-row span, .server-health-details dt, .server-resource-list dt, .alert-rule-list small, .alert-rule-list strong, .dependency-card dt, .dependency-card dd, .dependency-uptime-row__label, .error-code-legend dt, .error-code-legend dd, .empty-cell) {
+  color: var(--ops-text-2);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.detail-grid dd, .summary-grid dd, .health-live-row strong, .server-health-details dd, .server-resource-list dd, .alert-rule-list p, .error-code-legend dd),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.detail-grid dd, .summary-grid dd, .health-live-row strong, .server-health-details dd, .server-resource-list dd, .alert-rule-list p, .error-code-legend dd) {
+  color: var(--ops-text-1);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.ops-status-spine, .ops-key-metric, .ops-metric-item, .metric-formula, .health-live-details, .health-score-ring, .detail-grid > div, .summary-grid > div, .server-summary-strip > div, .server-health-details > div, .server-resource-list > div, .alert-rule-list > div, .dependency-card dl > div, .error-code-chart, .error-code-legend > div, .scope-row, .analysis-legend > div),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.ops-status-spine, .ops-key-metric, .ops-metric-item, .metric-formula, .health-live-details, .health-score-ring, .detail-grid > div, .summary-grid > div, .server-summary-strip > div, .server-health-details > div, .server-resource-list > div, .alert-rule-list > div, .dependency-card dl > div, .error-code-chart, .error-code-legend > div, .scope-row, .analysis-legend > div) {
+  border-color: var(--ops-line);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.metric-formula, .scope-row, .analysis-legend > div, .group-navigation__label, .server-summary-strip > div),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.metric-formula, .scope-row, .analysis-legend > div, .group-navigation__label, .server-summary-strip > div) {
+  background-color: var(--ops-inset);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.uptime-strip__slot, .uptime-strip__slot--unknown, .health-score-ring--unknown),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.uptime-strip__slot, .uptime-strip__slot--unknown, .health-score-ring--unknown) {
+  background-color: var(--ops-line-strong);
+  border-color: var(--ops-line-strong);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.request-id-shortcut, .panel-link, .group-tab--active, .subsection-heading, .operations-loading-state__spinner),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.request-id-shortcut, .panel-link, .group-tab--active, .subsection-heading, .operations-loading-state__spinner) {
+  color: var(--ops-info);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .health-score-ring,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .health-score-ring {
+  border-color: var(--ops-line-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ops-text-1) 8%, transparent);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.metric-card:hover, .signal-card:hover, .deployment-mode-card:hover, .service-row:hover),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.metric-card:hover, .signal-card:hover, .deployment-mode-card:hover, .service-row:hover) {
+  border-color: var(--ops-line-strong);
+  background-color: var(--ops-panel);
+  box-shadow: none;
+  transform: none;
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .error-code-chart::before,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .error-code-chart::before {
+  border-bottom-color: color-mix(in srgb, var(--ops-info) 18%, transparent);
+  background: repeating-linear-gradient(to right, color-mix(in srgb, var(--ops-info) 8%, transparent) 0 12%, transparent 12% 18%);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.operations-loading-state, .refresh-button, .request-id-shortcut, .group-navigation, .group-navigation__label, .panel, .signal-card, .metric-card, .deployment-mode-card, .service-row, .server-summary-strip, .ops-metric-item, .health-live-details, .health-score-ring, .log-config, .trace-waterfall, .error-code-chart, .log-detail-row td),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.operations-loading-state, .refresh-button, .request-id-shortcut, .group-navigation, .group-navigation__label, .panel, .signal-card, .metric-card, .deployment-mode-card, .service-row, .server-summary-strip, .ops-metric-item, .health-live-details, .health-score-ring, .log-config, .trace-waterfall, .error-code-chart, .log-detail-row td) {
+  border-color: var(--ops-line);
+  background-color: var(--ops-panel);
+  color: var(--ops-text-1);
+  box-shadow: none;
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.title-icon, .metric-icon, .service-row__icon),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.title-icon, .metric-icon, .service-row__icon) {
+  border-color: var(--ops-line);
+  background-color: transparent;
+  color: var(--ops-text-2);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.request-id-shortcut input, .request-id-shortcut button, .request-id-shortcut input::placeholder),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.request-id-shortcut input, .request-id-shortcut button, .request-id-shortcut input::placeholder) {
+  color: var(--ops-text-2);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.metric-formula, .log-detail-grid pre, .trace-waterfall__track, .scope-row, .analysis-legend > div, .log-config__fields input, .log-config__fields textarea),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.metric-formula, .log-detail-grid pre, .trace-waterfall__track, .scope-row, .analysis-legend > div, .log-config__fields input, .log-config__fields textarea) {
+  border-color: var(--ops-line);
+  background-color: var(--ops-inset);
+  color: var(--ops-text-1);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.group-tab, .panel-link, .request-id-shortcut button, .operations-loading-state__spinner, .chart-axis-label, .chart-time-labels),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.group-tab, .panel-link, .request-id-shortcut button, .operations-loading-state__spinner, .chart-axis-label, .chart-time-labels) {
+  color: var(--ops-info);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.group-tab--active::after, .runtime-bars--info i, .chart-bar--info),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.group-tab--active::after, .runtime-bars--info i, .chart-bar--info) {
+  background-color: var(--ops-info);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.error-code-chart, .error-code-legend > div, .summary-grid > div, .alert-rule-list > div, .scope-row, .analysis-legend > div, .server-summary-strip > div, .health-live-details),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.error-code-chart, .error-code-legend > div, .summary-grid > div, .alert-rule-list > div, .scope-row, .analysis-legend > div, .server-summary-strip > div, .health-live-details) {
+  border-color: var(--ops-line);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard :is(.health-score-ring--good, .health-score-ring--warn, .health-score-ring--critical),
+:global(:root[data-theme='ModernLight']) .operations-dashboard :is(.health-score-ring--good, .health-score-ring--warn, .health-score-ring--critical) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ops-text-1) 8%, transparent);
+}
+
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .health-score-ring--good,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .health-score-ring--good { border-color: var(--ops-ok); }
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .health-score-ring--warn,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .health-score-ring--warn { border-color: var(--ops-warning); }
+:global(:root[data-theme='ClassicLight']) .operations-dashboard .health-score-ring--critical,
+:global(:root[data-theme='ModernLight']) .operations-dashboard .health-score-ring--critical { border-color: var(--ops-error); }
 </style>

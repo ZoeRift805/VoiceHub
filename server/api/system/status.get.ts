@@ -1,29 +1,33 @@
-import { defineEventHandler } from 'h3'
+import { defineEventHandler, getQuery } from 'h3'
 import { databaseManager } from '~~/server/utils/database-manager'
 import { getInstanceId } from '~~/server/utils/instance-id'
 import { isTelemetryEnabled } from '~~/server/utils/telemetry'
+import { getServerDate } from '~~/server/utils/serverTime'
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
   try {
-    const instanceId = await getInstanceId()
-    const telemetryEnabled = await isTelemetryEnabled()
+    const includeDatabase = getQuery(event).includeDatabase !== 'false'
+    const instanceId = includeDatabase ? await getInstanceId() : null
+    const telemetryEnabled = includeDatabase ? await isTelemetryEnabled() : null
 
     // 获取数据库连接状态
-    const dbStatus = await databaseManager.getConnectionStatus()
+    const dbStatus = includeDatabase ? await databaseManager.getConnectionStatus() : null
     let poolStatus = null
-    try {
-      poolStatus = await databaseManager.getConnectionPoolStatus()
-    } catch (poolError) {
-      console.warn('[System Status] Failed to get database pool status:', poolError)
+    if (includeDatabase) {
+      try {
+        poolStatus = await databaseManager.getConnectionPoolStatus()
+      } catch (poolError) {
+        console.warn('[System Status] Failed to get database pool status:', poolError)
+      }
     }
 
     // 数据库连接测试结果
-    const dbTestResult = dbStatus.connected
-    const dbError = dbStatus.connected ? null : dbStatus.error
+    const dbTestResult = dbStatus?.connected ?? null
+    const dbError = dbStatus?.connected ? null : dbStatus?.error || null
 
     // 获取系统信息
     const systemInfo = {
-      timestamp: new Date().toISOString(),
+      timestamp: getServerDate().toISOString(),
       uptime: process.uptime(),
       nodeVersion: process.version,
       platform: process.platform,
@@ -42,12 +46,12 @@ export default defineEventHandler(async () => {
         instanceId,
         telemetryEnabled
       },
-      database: {
+      database: includeDatabase ? {
         connected: dbTestResult,
         poolStatus: poolStatus,
         connectionInfo: dbStatus,
         error: dbError
-      },
+      } : null,
       system: systemInfo
     }
   } catch (error) {

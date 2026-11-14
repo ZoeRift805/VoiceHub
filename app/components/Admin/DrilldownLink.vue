@@ -29,9 +29,9 @@ defineEmits(['activate'])
   align-items: center;
   gap: 0.3rem;
   border: 0;
-  border-bottom: 1px dashed rgb(96 165 250 / 0.52);
+  border-bottom: 1px dashed color-mix(in srgb, var(--primary) 52%, transparent);
   padding: 0;
-  color: rgb(147 197 253);
+  color: var(--text-link, var(--primary));
   background: transparent;
   font-size: inherit;
   line-height: 1.3;
@@ -53,8 +53,8 @@ defineEmits(['activate'])
 .drilldown-link:hover:not(:disabled),
 .drilldown-link:focus-visible {
   border-bottom-style: solid;
-  border-color: rgb(147 197 253);
-  color: rgb(219 234 254);
+  border-color: var(--text-link-hover, var(--primary-hover));
+  color: var(--text-link-hover, var(--primary-hover));
   outline: 0;
 }
 
@@ -70,7 +70,21 @@ defineEmits(['activate'])
 
 .drilldown-link:disabled {
   cursor: not-allowed;
-  border-color: rgb(82 82 91 / 0.5);
-  color: rgb(82 82 91);
+  border-color: color-mix(in srgb, var(--text-tertiary) 50%, transparent);
+  color: var(--text-tertiary);
+}
+
+:global(:root[data-theme='ClassicLight']) .drilldown-link,
+:global(:root[data-theme='ModernLight']) .drilldown-link {
+  border-color: color-mix(in srgb, var(--text-secondary) 52%, transparent);
+  color: var(--text-secondary);
+}
+
+:global(:root[data-theme='ClassicLight']) .drilldown-link:hover:not(:disabled),
+:global(:root[data-theme='ClassicLight']) .drilldown-link:focus-visible,
+:global(:root[data-theme='ModernLight']) .drilldown-link:hover:not(:disabled),
+:global(:root[data-theme='ModernLight']) .drilldown-link:focus-visible {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
 }
 </style>

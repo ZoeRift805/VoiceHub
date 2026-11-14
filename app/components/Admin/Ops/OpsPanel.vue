@@ -45,25 +45,25 @@ defineProps({
 </script>
 
 <style scoped>
-.ops-panel { overflow: hidden; border: 1px solid var(--ops-line, rgb(63 63 70)); border-left: 3px solid var(--ops-muted, rgb(82 82 91)); border-radius: 6px; background: var(--ops-panel, rgb(24 24 27 / .56)); }
-.ops-panel--ok { --ops-muted: var(--ops-ok, #34d399); }
-.ops-panel--warning { --ops-muted: var(--ops-warning, #fbbf24); }
-.ops-panel--error { --ops-muted: var(--ops-error, #f87171); }
-.ops-panel--unknown { --ops-muted: var(--ops-unknown, #71717a); }
+.ops-panel { overflow: hidden; border: 1px solid var(--ops-line, var(--border-primary)); border-left: 3px solid var(--ops-muted, var(--text-tertiary)); border-radius: 6px; background: var(--ops-panel, var(--bg-secondary)); }
+.ops-panel--ok { --ops-muted: var(--ops-ok, var(--success)); }
+.ops-panel--warning { --ops-muted: var(--ops-warning, var(--warning)); }
+.ops-panel--error { --ops-muted: var(--ops-error, var(--error)); }
+.ops-panel--unknown { --ops-muted: var(--ops-unknown, var(--text-tertiary)); }
 .ops-panel--stale { border-style: dashed; }
-.ops-panel__header { display: flex; min-height: 3.1rem; align-items: center; justify-content: space-between; gap: .75rem; border-bottom: 1px solid var(--ops-line, rgb(63 63 70)); padding: .6rem .75rem; }
+.ops-panel__header { display: flex; min-height: 3.1rem; align-items: center; justify-content: space-between; gap: .75rem; border-bottom: 1px solid var(--ops-line, var(--border-primary)); padding: .6rem .75rem; }
 .ops-panel__heading, .ops-panel__actions { display: flex; min-width: 0; align-items: center; gap: .55rem; }
-.ops-panel__heading h3 { margin: 0; color: var(--ops-text-1, rgb(228 228 231)); font-size: .78rem; font-weight: 700; }
-.ops-panel__heading p, .ops-panel__updated { margin: .15rem 0 0; color: var(--ops-text-3, rgb(113 113 122)); font-size: .62rem; }
+.ops-panel__heading h3 { margin: 0; color: var(--ops-text-1, var(--text-primary)); font-size: .78rem; font-weight: 700; }
+.ops-panel__heading p, .ops-panel__updated { margin: .15rem 0 0; color: var(--ops-text-3, var(--text-tertiary)); font-size: .62rem; }
 .ops-panel__updated { margin: 0; white-space: nowrap; }
 .ops-panel__dot { width: .46rem; height: .46rem; flex: 0 0 auto; border-radius: 50%; background: var(--ops-muted); }
 .ops-panel__dot--error { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ops-muted) 14%, transparent); }
-.ops-panel__actions button { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border: 1px solid var(--ops-line, rgb(63 63 70)); border-radius: 4px; color: var(--ops-text-2, rgb(161 161 170)); background: transparent; cursor: pointer; }
-.ops-panel__actions button:hover { border-color: var(--ops-line-strong, rgb(82 82 91)); color: var(--ops-text-1, rgb(228 228 231)); }
+.ops-panel__actions button { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border: 1px solid var(--ops-line, var(--border-primary)); border-radius: 4px; color: var(--ops-text-2, var(--text-secondary)); background: transparent; cursor: pointer; }
+.ops-panel__actions button:hover { border-color: var(--ops-line-strong, var(--border-secondary)); color: var(--ops-text-1, var(--text-primary)); }
 .ops-panel__actions button:disabled { cursor: not-allowed; opacity: .5; }
 .ops-panel__body { min-height: 5.25rem; padding: 1rem; }
-.ops-panel__state { display: flex; min-height: 4rem; align-items: center; justify-content: center; gap: .55rem; color: var(--ops-text-3, rgb(113 113 122)); font-size: .72rem; }
-.ops-panel__state--error { color: var(--ops-error, #f87171); }
+.ops-panel__state { display: flex; min-height: 4rem; align-items: center; justify-content: center; gap: .55rem; color: var(--ops-text-3, var(--text-tertiary)); font-size: .72rem; }
+.ops-panel__state--error { color: var(--ops-error, var(--error)); }
 .ops-panel__state--error button { border: 0; padding: 0; color: inherit; background: transparent; font: inherit; text-decoration: underline; cursor: pointer; }
 .ops-panel__spin { animation: ops-panel-spin .8s linear infinite; }
 @keyframes ops-panel-spin { to { transform: rotate(360deg); } }
