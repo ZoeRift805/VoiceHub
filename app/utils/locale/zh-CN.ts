@@ -2087,6 +2087,9 @@ export const pages = {
       audioMatchFailed: '听歌识曲失败，请稍后重试',
       microphoneRequesting: '正在请求麦克风权限...',
       microphoneUnsupported: '当前环境不支持麦克风访问，请确保使用 HTTPS 访问或 localhost 调试',
+      microphonePermissionDenied: '麦克风权限被拒绝，请在浏览器和系统设置中允许访问麦克风后重试',
+      microphoneNotFound: '未找到麦克风，请连接麦克风后重试',
+      microphoneBusy: '无法读取麦克风，请检查设备是否被其他程序占用后重试',
       audioMatchRecordingProgress: (current: string, total: number) =>
         `录音中 ${current}s / ${total}s`,
       microphoneTimeout: '麦克风授权超时，请在系统设置中确认已允许麦克风权限',

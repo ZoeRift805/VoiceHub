@@ -2142,6 +2142,9 @@ export const pages = {
       audioMatchFailed: 'Song recognition failed. Please try again later',
       microphoneRequesting: 'Requesting microphone permission...',
       microphoneUnsupported: 'Microphone access is not supported. Use HTTPS or localhost',
+      microphonePermissionDenied: 'Microphone permission denied. Allow access in your browser and system settings, then retry',
+      microphoneNotFound: 'No microphone found. Connect a microphone and retry',
+      microphoneBusy: 'Cannot read microphone audio. Check whether another app is using the device and retry',
       audioMatchRecordingProgress: (current: string, total: number) =>
         `Recording ${current}s / ${total}s`,
       microphoneTimeout: 'Microphone permission timed out. Check system permissions',
